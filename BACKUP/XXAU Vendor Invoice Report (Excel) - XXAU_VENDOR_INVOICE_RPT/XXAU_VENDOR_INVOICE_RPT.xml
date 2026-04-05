@@ -1,0 +1,118 @@
+<?xml version = '1.0' encoding = 'UTF-8'?>
+
+<dataTemplate name="XXAU_VENDOR_INVOICE_RPT" defaultPackage="" version="1.0">
+  <properties>
+    <property name="xml_tag_case" value="upper"/>
+    <property name="debug_mode" value="on"/>
+  </properties>
+
+  <parameters>
+  <parameter name="P_FROM_DATE" dataType="character"/>
+  <parameter name="P_TO_DATE" dataType="character"/>
+    <parameter name="P_DAYS_METHOD" dataType="character"/>
+  </parameters> 
+
+  <dataQuery>
+    <sqlStatement name="Q_1">
+      <![CDATA[
+        SELECT
+	  ASS.VENDOR_NAME
+	, ASS.SEGMENT1                   VENDOR_NUMBER
+	, ASSSA.VENDOR_SITE_CODE
+	, AIA.INVOICE_NUM 
+--	, AIA.INVOICE_DATE INVOICE_DATE
+	, TO_CHAR(AIA.INVOICE_DATE,'DD-Mon-RRRR')  INVOICE_DATE
+	, AIA.INVOICE_AMOUNT 
+	, AIA.INVOICE_TYPE_LOOKUP_CODE   INVOICE_TYPE 
+	, ASS.ATTRIBUTE12 MSME 
+	, ASS.ATTRIBUTE4 MSME_TYPE 
+	, ASS.ATTRIBUTE5 MSME_NO
+--	, :P_TO_DATE  CUT_OF_DATE 
+	, TO_CHAR(TO_DATE(SUBSTR(:P_FROM_DATE,1,11),'RRRR/MM/DD'),'DD-Mon-RRRR')  FROM_DATE 
+	, TO_CHAR(TO_DATE(SUBSTR(:P_TO_DATE,1,11),'RRRR/MM/DD'),'DD-Mon-RRRR')  CUT_OF_DATE 
+	, TO_DATE(SUBSTR(:P_TO_DATE,1,11),'RRRR/MM/DD')-DECODE(:P_DAYS_METHOD,'Invoice',AIA.INVOICE_DATE,'GL Date',AIA.GL_DATE) DAYS 
+	, TO_CHAR(AIA.GL_DATE, 'DD-Mon-RRRR') GL_DATE 
+	, AIA.SET_OF_BOOKS_ID 
+	, ACA.CHECK_NUMBER DOCUMENT_NUMBER 
+	, TO_CHAR(ACA.CHECK_DATE,'DD-Mon-RRRR') PAY_DATE 
+	, AIPA.AMOUNT PAYMENT_AMOUNT 
+	, XXAU_GST_UTILITY_PKG.TP_REGISTRATION_NUMBER@EBSTOHR(ASS.VENDOR_ID,ASSSA.VENDOR_SITE_ID,'PAN','S') PAN_NO
+	, CASE 
+		WHEN TO_DATE(SUBSTR(:P_TO_DATE,1,11),'RRRR/MM/DD')-DECODE(:P_DAYS_METHOD,'Invoice',AIA.INVOICE_DATE,'GL Date',AIA.GL_DATE) <= 45 AND AIA.GL_DATE IS NOT NULL
+			THEN  NVL (AIPA.AMOUNT, 0) 
+		ELSE 0 
+	  END PAYMENT_AMOUNT_LE_45
+	, CASE 
+		WHEN TO_DATE(SUBSTR(:P_TO_DATE,1,11),'RRRR/MM/DD')-DECODE(:P_DAYS_METHOD,'Invoice',AIA.INVOICE_DATE,'GL Date',AIA.GL_DATE) > 45 AND AIA.GL_DATE IS NOT NULL
+			THEN  NVL (AIPA.AMOUNT, 0)
+		ELSE 0 
+	  END PAYMENT_AMOUNT_GT_45
+	, CASE 
+		WHEN TO_DATE(SUBSTR(:P_TO_DATE,1,11),'RRRR/MM/DD')-DECODE(:P_DAYS_METHOD,'Invoice',AIA.INVOICE_DATE,'GL Date',AIA.GL_DATE) <= 45 AND AIA.GL_DATE IS NOT NULL
+			THEN  NVL (AIA.INVOICE_AMOUNT - NVL (AIPA.AMOUNT, 0), 0) 
+		ELSE 0 
+	  END OUTSTANDING_AMOUNT_LE_45
+	, CASE 
+		WHEN TO_DATE(SUBSTR(:P_TO_DATE,1,11),'RRRR/MM/DD')-DECODE(:P_DAYS_METHOD,'Invoice',AIA.INVOICE_DATE,'GL Date',AIA.GL_DATE) > 45 AND AIA.GL_DATE IS NOT NULL
+			THEN  NVL (AIA.INVOICE_AMOUNT - NVL (AIPA.AMOUNT, 0), 0)
+		ELSE 0 
+	  END OUTSTANDING_AMOUNT_GT_45
+FROM
+	APPS.AP_SUPPLIERS                   ASS,
+	APPS.AP_SUPPLIER_SITES_ALL          ASSSA,
+	APPS.AP_INVOICES_ALL                AIA,
+	APPS.AP_INVOICE_PAYMENTS_ALL      AIPA,
+	APPS.AP_CHECKS_ALL    ACA
+WHERE 1=1
+	AND ASS.VENDOR_ID = ASSSA.VENDOR_ID
+	AND ASS.VENDOR_ID = AIA.VENDOR_ID
+	AND ASSSA.VENDOR_SITE_ID = AIA.VENDOR_SITE_ID
+	AND AIA.INVOICE_ID=AIPA.INVOICE_ID(+)
+	AND UPPER(ASS.ATTRIBUTE12)='YES'
+	AND AIPA.CHECK_ID=ACA.CHECK_ID (+)
+--			AND AIA.INVOICE_NUM = '2025-26/222'
+	AND DECODE(:P_DAYS_METHOD,'Invoice',AIA.INVOICE_DATE,'GL Date',AIA.GL_DATE) BETWEEN TO_DATE(SUBSTR(:P_FROM_DATE,1,11),'RRRR/MM/DD') AND TO_DATE(SUBSTR(:P_TO_DATE,1,11),'RRRR/MM/DD')	     
+		]]>
+    </sqlStatement>
+	<sqlStatement name="Q_2">
+      <![CDATA[
+	  SELECT 
+	    TO_CHAR(TO_DATE(SUBSTR(:P_FROM_DATE,1,11),'RRRR/MM/DD'),'DD-Mon-RRRR') FROM_DATE
+		, TO_CHAR(TO_DATE(SUBSTR(:P_TO_DATE,1,11),'RRRR/MM/DD'),'DD-Mon-RRRR') TO_DATE
+		FROM DUAL	  
+       ]]>
+    </sqlStatement>
+  </dataQuery>
+
+  <dataStructure>
+    <group name="G_PARA" dataType="varchar2" source="Q_2">        
+		<element name="FROM_DATE" dataType="varchar2" value="FROM_DATE"/>
+		<element name="TO_DATE" dataType="varchar2" value="TO_DATE"/>
+		<element name="DAYS_METHOD" dataType="varchar2" value="P_DAYS_METHOD"/>
+	</group>
+    <group name="G_MAIN" dataType="varchar2" source="Q_1">  
+      <element name="VENDOR_NAME" dataType="varchar2" value="VENDOR_NAME"/>
+      <element name="VENDOR_NUMBER" dataType="varchar2" value="VENDOR_NUMBER"/>
+      <element name="VENDOR_SITE_CODE" dataType="varchar2" value="VENDOR_SITE_CODE"/>
+      <element name="INVOICE_NUM" dataType="varchar2" value="INVOICE_NUM"/>
+      <element name="INVOICE_DATE" dataType="varchar2" value="INVOICE_DATE"/>
+      <element name="INVOICE_AMOUNT" dataType="varchar2" value="INVOICE_AMOUNT"/>
+      <element name="INVOICE_TYPE" dataType="varchar2" value="INVOICE_TYPE"/>
+      <element name="MSME" dataType="varchar2" value="MSME"/>
+      <element name="MSME_TYPE" dataType="varchar2" value="MSME_TYPE"/>
+      <element name="MSME_NO" dataType="varchar2" value="MSME_NO"/>
+      <element name="CUT_OF_DATE" dataType="varchar2" value="CUT_OF_DATE"/>
+	  <element name="DAYS" dataType="varchar2" value="DAYS"/>
+	  <element name="GL_DATE" dataType="varchar2" value="GL_DATE"/>
+	  <element name="SET_OF_BOOKS_ID" dataType="varchar2" value="SET_OF_BOOKS_ID"/>
+	  <element name="DOCUMENT_NUMBER" dataType="varchar2" value="DOCUMENT_NUMBER"/>
+	  <element name="PAY_DATE" dataType="varchar2" value="PAY_DATE"/>
+	  <element name="PAYMENT_AMOUNT" dataType="varchar2" value="PAYMENT_AMOUNT"/>
+	  <element name="PAN_NO" dataType="varchar2" value="PAN_NO"/>
+	  <element name="PAYMENT_AMOUNT_LE_45" dataType="varchar2" value="PAYMENT_AMOUNT_LE_45"/>
+	  <element name="PAYMENT_AMOUNT_GT_45" dataType="varchar2" value="PAYMENT_AMOUNT_GT_45"/>
+	  <element name="OUTSTANDING_AMOUNT_LE_45" dataType="varchar2" value="OUTSTANDING_AMOUNT_LE_45"/>
+	  <element name="OUTSTANDING_AMOUNT_GT_45" dataType="varchar2" value="OUTSTANDING_AMOUNT_GT_45"/>
+    </group>
+  </dataStructure>
+</dataTemplate>
