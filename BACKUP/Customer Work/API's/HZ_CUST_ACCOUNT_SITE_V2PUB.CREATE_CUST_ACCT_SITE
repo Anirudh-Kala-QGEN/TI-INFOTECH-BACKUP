@@ -1,0 +1,43 @@
+DECLARE
+   L_CUST_ACCT_SITE_REC HZ_CUST_ACCOUNT_SITE_V2PUB.CUST_ACCT_SITE_REC_TYPE;
+   L_CUST_ACCT_SITE_ID  HZ_CUST_ACCT_SITES.CUST_ACCT_SITE_ID%TYPE;
+   L_RETURN_STATUS      VARCHAR2(100);
+   L_MSG_COUNT          NUMBER;
+   L_MSG_DATA           VARCHAR2(2000);
+BEGIN
+   DBMS_OUTPUT.ENABLE (buffer_size => NULL);
+   --Initiate the EBS Environment for API processing
+   fnd_global.apps_initialize(2482, 20678, 222);
+   mo_global.init('AR');
+   fnd_client_info.set_org_context(288);
+   --Populating Cust Acct Site Record
+   l_cust_acct_site_rec.cust_account_id      := 6127179;
+   l_cust_acct_site_rec.party_site_id        := 6374730;
+   l_cust_acct_site_rec.created_by_module    := 'BO_API';
+   --Calling hz_cust_account_site_v2pub.create_cust_acct_site
+   DBMS_OUTPUT.PUT_LINE('Calling hz_cust_account_site_v2pub.create_cust_acct_site api');
+   HZ_CUST_ACCOUNT_SITE_V2PUB.CREATE_CUST_ACCT_SITE
+   (
+			       p_init_msg_list      => FND_API.G_TRUE,
+             p_cust_acct_site_rec => l_cust_acct_site_rec,
+             x_cust_acct_site_id  => l_cust_acct_site_id,
+             x_return_status      => l_return_status,
+             x_msg_count          => l_msg_count,
+             x_msg_data           => l_msg_data
+            );
+   IF l_return_status = 'S' 
+   THEN
+      COMMIT;
+      DBMS_OUTPUT.PUT_LINE('Cust Acct Site Creation is Successful '); 
+	    DBMS_OUTPUT.PUT_LINE('Cust Acct Site Id = '||l_cust_acct_site_id); 
+   ELSE
+      ROLLBACK;
+      FOR i IN 1 .. l_msg_count
+      LOOP
+         l_msg_data := FND_MSG_PUB.get( p_msg_index => i, p_encoded => 'F');
+         dbms_output.put_line( i|| ') '|| l_msg_data);
+      END LOOP;
+      DBMS_OUTPUT.put_line ('Cust Acct Site Creation failed:'||l_msg_data);
+   END IF;
+   DBMS_OUTPUT.PUT_LINE('Cust Acct Site Creation Complete');
+END;
