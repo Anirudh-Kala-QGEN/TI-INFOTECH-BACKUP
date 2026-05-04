@@ -1,0 +1,35 @@
+  RECORD_ID                   NUMBER, 		Required, 		Should unique sequence
+  INVOICE_NUMBER              VARCHAR2, 	Required,
+  INVOICE_TYPE                VARCHAR2,		Required,		Standard, Credit Memo, Debit Memo
+  PARTY_NAME                  VARCHAR2, 	Required,		Trading Partner Name
+  VENDOR_CODE                 VARCHAR2,		Required,		Trading Partner Code
+  VENDOR_SITE_CODE            VARCHAR2,		Required, 		Vendor Site Code
+  GL_DATE                     DATE,			Required,		Should be in Open Period
+  INVOICE_DATE                DATE,			Required, 		
+  INVOICE_CURRENCY_CODE       VARCHAR2, 	Required, 		'INR'
+  EXCHANGE_RATE               NUMBER,						Only Requred if Currency is other then 'INR'
+  GROUP_LINE_NUM              NUMBER,		Required,		Line Number
+  LINE_TYPE                   VARCHAR2,		Required,		Item, Miscellaneous
+  LINE_AMOUNT                 NUMBER,		Required,		
+  LINE_DESCRIPTION            VARCHAR2,
+  UNIT                        VARCHAR2,		Required,		For Code combination's Unit (111,104,717 etc.)
+  LOCATION                    VARCHAR2,		Required, 		For Code combination's LOCATION (999, etc.)
+  DEPARTMENT                  VARCHAR2,		Required, 		For Code combination's DEPARTMENT (99, etc.)
+  NATURAL_ACCOUNT             VARCHAR2,		Required, 		For Code combination's NATURAL ACCOUNT (200040, etc.)
+  JOB_ACTIVITY                VARCHAR2,		Required, 		For Code combination's Job Activity (999, etc.)
+  BUSINESS_TYPE               VARCHAR2,		Required, 		For Code combination's BUSINESS TYPE (11, etc.)
+  FUTURE1                     VARCHAR2,		Required, 		For Code combination's FUTURE1 (99, etc.)
+  FUTURE2                     VARCHAR2,		Required, 		For Code combination's FUTURE2 (99, etc.)
+  FUTURE3                     VARCHAR2,		Required, 		For Code combination's FUTURE3 (99, etc.)
+  FUTURE4                     VARCHAR2,		Required, 		For Code combination's FUTURE4 (99, etc.)
+  HSNCODE                     VARCHAR2,
+  TAX_CATEGORY                VARCHAR2,		
+  CONTEXT_VALUE               VARCHAR2,						
+  FLEX_FIELD_VALUE            VARCHAR2,		Required 		only if Contax Value is entered. Values should be like (T1,T2, T3, T4 if the context value is 'Invoice Tax Nature')
+  OPERATING_UNIT              VARCHAR2,		Required,		Values should be Operating Unit complete name : Amar Ujala Publications Limited , IPPL Operating Unit etc.
+  PROCESS_FLAG                VARCHAR2,		Required,		should be 'N' for new entries
+  CREATED_BY                  NUMBER,		Required,
+  CREATION_DATE               DATE,			Required,
+  UPDATED_BY                  NUMBER,		Required,
+  LAST_UPDATE_DATE            DATE,			Required,
+  BATCH_ID                    NUMBER		Required,		Will be same for the Invoices uploaded at same time.
