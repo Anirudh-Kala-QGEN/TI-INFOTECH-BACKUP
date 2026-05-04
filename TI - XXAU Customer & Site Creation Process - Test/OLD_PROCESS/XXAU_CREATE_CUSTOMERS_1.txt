@@ -1,0 +1,1133 @@
+CREATE OR REPLACE PROCEDURE APPS.XXAU_CREATE_CUSTOMERS_1 (
+    p_errbuf   OUT VARCHAR2,
+    p_err_code OUT NUMBER,
+    p_agency_id   NUMBER
+) IS
+
+/*Creates the customer and customer profile Data*/
+    custacccountrec              hz_cust_account_v2pub.cust_account_rec_type;
+    custprofilerec               hz_customer_profile_v2pub.customer_profile_rec_type;
+    custorgrec                   hz_party_v2pub.organization_rec_type;
+    custpartyrec                 hz_party_v2pub.party_rec_type;
+    l_location_rec               hz_location_v2pub.location_rec_type;
+    l_party_site_rec             hz_party_site_v2pub.party_site_rec_type;
+    l_cust_acct_site_rec         hz_cust_account_site_v2pub.cust_acct_site_rec_type;
+    l_cust_site_use_rec          hz_cust_account_site_v2pub.cust_site_use_rec_type;
+    l_customer_profile_rec       hz_customer_profile_v2pub.customer_profile_rec_type;
+    lv_person_rec                hz_party_v2pub.person_rec_type;
+    lv_org_contact_rec           hz_party_contact_v2pub.org_contact_rec_type;
+    lv_contact_point_rec         hz_contact_point_v2pub.contact_point_rec_type;
+    lv_phone_rec                 hz_contact_point_v2pub.phone_rec_type;
+    lv_email_rec                 hz_contact_point_v2pub.email_rec_type;
+    l_location_id                NUMBER;
+    lv_location_id               NUMBER;
+    l_party_site_number          VARCHAR2(100);
+    l_party_id                   NUMBER;
+    l_party_site_id              NUMBER;
+    x_site_use_id            number;
+    l_cust_acct_site_id          NUMBER;
+    l_cust_acct_site_use_id      NUMBER;
+    lv_site_use_id               NUMBER;
+    lv_org_id                    NUMBER := 288;
+    lv_term_name                 VARCHAR2(100);
+    lv_term_id                   NUMBER := 5;
+    lv_credit_checking           VARCHAR2(1);
+    lv_discount_terms            VARCHAR2(1);
+    lv_dunning_letters           VARCHAR2(1);
+    lv_interest_charges          VARCHAR2(1);
+    lv_send_statements           VARCHAR2(1);
+    lv_credit_balance_statements VARCHAR2(1);
+    lv_credit_hold               VARCHAR2(1);
+    lv_interest_period_days      NUMBER;
+    lv_count_1                   NUMBER;
+    lv_count_2                   NUMBER;
+    lv_statement_cycle_id        NUMBER;
+    x_party_id1                  NUMBER;
+    lv_party_id                  NUMBER;
+    lv_seg2                      VARCHAR2(100);
+    lv_rec_id                    NUMBER;
+    lv_rev_id                    NUMBER;
+    lv_lob                       VARCHAR2(30);
+    lv_account_rev               VARCHAR2(30);
+    v_num                        NUMBER;
+    lv_api_message               VARCHAR2(4000);
+    lv_msg_index_out             NUMBER;
+    lv_api_name                  VARCHAR2(150);
+    lv_table_name                VARCHAR(150);
+    lv_contact_point_id          NUMBER;
+    lv2_org_contact_id           NUMBER;
+    lv2_party_rel_id             NUMBER;
+    lv1_party_id                 NUMBER;
+    lv1_party_number             VARCHAR2(150);
+    lv2_party_id                 NUMBER;
+    lv2_party_number             VARCHAR2(150);
+    lv1_profile_id               NUMBER;
+    v_check1                     NUMBER := 0;
+    v_check                      NUMBER := 0;
+    ln_id_flex_num               NUMBER;
+    v_gl_code                    NUMBER;
+    l_status                     BOOLEAN;
+    v_error_msz                  VARCHAR2(2000);
+    x_cust_account_id            NUMBER;
+    x_account_number             VARCHAR2(30);
+    x_party_id                   NUMBER;
+    x_party_number               VARCHAR2(30);
+    x_profile_id                 NUMBER;
+    x_return_status              VARCHAR2(3);
+    x_msg_count                  NUMBER;
+    x_msg_data                   VARCHAR2(3000);
+    l_collector_id               NUMBER;
+    v_check_act                  NUMBER;
+    CURSOR main_unit IS
+    (
+        SELECT DISTINCT
+            unit,
+            customer_type
+        FROM
+            aucustom.xxau_customer_details@ebstohr t1
+        WHERE 1=1
+		AND AGENCY_ID = NVL(p_agency_id, AGENCY_ID)
+--        and AGENCY_ID='6074637'
+         and   (EXISTS (
+			   SELECT 1
+			   FROM aucustom.au_customer_ship_to@ebstohr t2
+			   WHERE 1=1
+				 AND t2.agency_id = t1.agency_id
+				 AND t2.centre_number = t1.centre_number
+				 and t2.erp_site_use_id IS NULL
+		--        and t2.agency_id='6074637'
+				  AND t2.agency_id = NVL(p_agency_id, t2.agency_id)
+		   )
+			OR NVL(process_flag, 'N') = 'N')
+                                                       ---AND unit='110'
+    );
+
+    CURSOR create_cust (
+        p_unit      VARCHAR2,
+        p_cust_type VARCHAR2
+    ) IS
+    ( SELECT DISTINCT
+            customer_name,
+            unit,
+            customer_type,
+            customer_class                          customer_class_code,
+            mobile_no,
+            contact_person,
+            nvl(account_description, customer_name) account_description,
+            abc_type,
+            old_party_id,
+            old_customer_id,
+            agency_id
+        FROM
+            aucustom.xxau_customer_details@ebstohr tt3
+        WHERE 1=1
+           --     process_flag, 'N' = (
+        --   tt3.erp_site_use_id IS NULL
+--        tt3.agency_id='6074637'
+    and  (EXISTS (
+       SELECT 1
+       FROM aucustom.au_customer_ship_to@ebstohr t2
+       WHERE 1=1
+         AND t2.agency_id = tt3.agency_id
+         AND t2.centre_number = tt3.centre_number
+         and t2.erp_site_use_id IS NULL
+--        and t2.agency_id='6074637'
+        AND t2.agency_id = NVL(p_agency_id, T2.agency_id)
+   )
+   OR NVL(process_flag, 'N') = 'N')
+
+            AND customer_type = p_cust_type
+           AND unit = p_unit
+
+           -- and t2.agency_id='9456'
+
+    );
+
+    CURSOR customer_cur2 (
+        p_cust_name    VARCHAR2,
+        p_unit         VARCHAR2,
+        p_cust_type    VARCHAR2,
+        p_account_desc VARCHAR2
+    ) IS
+     SELECT DISTINCT
+        customer_name,
+        unit,
+        customer_type,
+        customer_class customer_calss_code,
+        address1,
+        address2,
+        address3,
+        address4,
+        city,
+        state,
+        decode(
+            upper(country),
+            'INDIA',
+            'IN',
+            upper(country)
+        )              country,
+        county,
+        location1,
+        station_name,
+        pincode        postal_code,
+        'BILL_TO'      site_use_code,
+        decode(
+            upper(primary_site_falg),
+            'YES',
+            'Y',
+            'N'
+        )              primary_flag,
+        'A'            status,
+        rec_account,
+        payment_terms,
+        centre_number,
+        agency_id
+    FROM
+        aucustom.xxau_customer_details@ebstohr t1
+    WHERE
+           (EXISTS (
+       SELECT 1
+       FROM aucustom.au_customer_ship_to@ebstohr t2
+       WHERE 1=1
+         AND t2.agency_id = t1.agency_id
+         AND t2.centre_number = t1.centre_number
+         and t2.erp_site_use_id IS NULL
+   )
+   OR NVL(process_flag, 'N') = 'N')
+        AND customer_type = p_cust_type
+        AND unit = p_unit
+        AND customer_name = p_cust_name
+        AND account_description = p_account_desc;
+
+BEGIN
+    fnd_file.put_line(fnd_file.log, 'In createCustomer Procedure.');
+    mo_global.init('AR');
+    fnd_global.apps_initialize(
+        user_id      => 1117        ----user_id
+        ,
+        resp_id      => 50677
+                                                            ---responsibility id
+        ,
+        resp_appl_id => 222
+    );                     ---resp application id
+    MO_GLOBAL.SET_POLICY_CONTEXT('S', 288);
+
+      ----99 is the org_id that I am using for the organization
+    BEGIN
+        INSERT INTO aucustom.xxau_customer_details@ebstohr (
+            unit,
+            unit_name,
+            customer_name,
+            customer_class,
+            customer_type,
+            address1,
+            address2,
+            address3,
+            address4,
+            state,
+            city,
+            pincode,
+            country,
+            county,
+            station_name,
+            account_description,
+            location1,
+            rec_account,
+            mobile_no,
+            contact_person,
+            payment_terms,
+            primary_site_falg,
+            gstin,
+            pan,
+            third_party_sate_code,
+            process_flag,
+            error_msz,
+            third_party_reg_flag,
+            old_party_id,
+            old_customer_id,
+            agency_id,
+            centre_number,
+            abc_type,
+            creation_date
+        )
+            SELECT
+                tt4.organization_code,
+                tt4.org_name,
+                tt.agency_name,
+                NULL                                                                                             customer_class,
+                decode(tt.prouct_name, 'Amar Ujala - Variant', 'Circulation Customers', 'Amar Ujala', 'Circulation Customers',
+                       'Amar Ujala - Udaan', 'Udaan Customers', 'Amar Ujala - Safalta', 'NEW SAFALTA CUSTOMERS') customer_type,
+                nvl((
+                    SELECT
+                        address
+                    FROM
+                        aucustom.au_customer_master_advance@ebstohr
+                    WHERE
+                            agency_id = tt.agency_id
+                        AND inv_org = tt.inv_org
+                ),(
+                    SELECT
+                        address
+                    FROM
+                        aucustom.au_customer_master_occupa@ebstohr
+                    WHERE
+                            agency_id = tt.agency_id
+                        AND inv_org = tt.inv_org
+                ))                                                                                               address,
+                NULL                                                                                             address2,
+                NULL                                                                                             address3,
+                NULL                                                                                             address4,
+                tt3.state,
+                tt3.city,
+                tt3.postal_code,
+                'INDIA'                                                                                          country,
+                tt3.district,
+                tt3.name_of_centre                                                                               station_name,
+                tt5.drop_point                                                                                   account_description,
+                tt3.name_of_centre                                                                               location1,
+                tt4.organization_code
+                || '.9999.'
+                || tt4.organization_code
+                || '.102.205110.'
+                || tt3.dak_code
+                || '.999.999.999.999'                                                                            rec_account,
+                nvl((
+                    SELECT
+                        mobile_no
+                    FROM
+                        aucustom.au_customer_master_advance@ebstohr
+                    WHERE
+                            agency_id = tt.agency_id
+                        AND inv_org = tt.inv_org
+                ),(
+                    SELECT
+                        mobile_no
+                    FROM
+                        aucustom.au_customer_authorise_per@ebstohr
+                    WHERE
+                            agency_id = tt.agency_id
+                        AND inv_org = tt.inv_org
+                ))                                                                                               mobile_no,
+                nvl((
+                    SELECT
+                        entity_name
+                    FROM
+                        aucustom.au_customer_master_advance@ebstohr
+                    WHERE
+                            agency_id = tt.agency_id
+                        AND inv_org = tt.inv_org
+                ),(
+                    SELECT
+                        entity_name
+                    FROM
+                        aucustom.au_customer_authorise_per@ebstohr
+                    WHERE
+                            agency_id = tt.agency_id
+                        AND inv_org = tt.inv_org
+                ))                                                                                               contact_person,
+                'Immediate '                                                                                     payment_term,
+                decode(tt3.primary_flag, 'Y', 'YES', 'NO')                                                       primary_flag,
+                'Unregistered'                                                                                   gstin,
+                nvl((
+                    SELECT
+                        pan
+                    FROM
+                        aucustom.au_customer_master_advance@ebstohr
+                    WHERE
+                            agency_id = tt.agency_id
+                        AND inv_org = tt.inv_org
+                ),(
+                    SELECT
+                        pan
+                    FROM
+                        aucustom.au_customer_authorise_per@ebstohr
+                    WHERE
+                            agency_id = tt.agency_id
+                        AND inv_org = tt.inv_org
+                ))                                                                                               pan,
+                (
+                    SELECT
+                        state_code
+                    FROM
+                        aucustom.xxau_agency_state@ebstohr
+                    WHERE
+                        description = tt3.state
+                )                                                                                                third_party_sate_code
+                ,
+                'N',
+                NULL,
+                'N',
+                decode(tt.prouct_name, 'Amar Ujala - Udaan', tt3.erp_party_id, 'Amar Ujala - Safalta', tt3.erp_party_id,
+                       tt5.erp_party_id)                                                                         erp_party_id,
+                decode(tt.prouct_name, 'Amar Ujala - Udaan', tt3.erp_customer_id, 'Amar Ujala - Safalta', tt3.erp_customer_id,
+                       tt5.erp_customer_id)                                                                      erp_customer_id,
+                tt3.agency_id,
+                tt3.centre_number,
+                decode(tt5.agency_area_type, 'D.Hq UPC', 2, 1)                                                   abc_audit,
+                sysdate
+            FROM
+                aucustom.xxau_agency_approval_detials@ebstohr tt,
+                aucustom.au_customer_ship_to@ebstohr          tt3,
+                aucustom.xxau_inv_organization@ebstohr        tt4,
+                aucustom.au_customer_master_new@ebstohr       tt5
+            WHERE
+                    tt.agency_id = tt3.agency_id
+                AND tt.inv_org = tt3.inv_org
+                AND tt3.inv_org = tt4.inv_org_id
+                AND tt.centre_number = tt3.centre_number
+                AND tt.inv_org = tt5.inv_org
+                AND tt.agency_id = tt5.agency_id
+                AND tt.inv_org = tt3.inv_org
+                AND tt.approve_reject = 'A'
+                AND tt.agency_id = NVL(p_agency_id, tt.agency_id)
+--             AND tt.agency_id = 6074637
+                AND nvl(tt3.approve_flag, 'N') = 'N'
+                AND tt3.erp_site_use_id IS NULL
+                AND NOT EXISTS (
+                    SELECT
+                        'Y'
+                    FROM
+                        aucustom.xxau_customer_details@ebstohr
+                    WHERE
+                            agency_id = tt3.agency_id
+                        AND centre_number = tt3.centre_number
+                )
+                AND sysdate BETWEEN tt3.effective_start_date AND tt3.effective_end_date
+                AND sysdate BETWEEN tt5.effective_start_date AND tt5.effective_end_date;
+
+    EXCEPTION
+        WHEN OTHERS THEN
+            NULL;
+    END;
+    
+	
+	FOR main_unit1 IN main_unit LOOP
+        FOR create_customer_rec IN create_cust(main_unit1.unit, main_unit1.customer_type) LOOP
+            IF create_customer_rec.old_customer_id IS NOT NULL THEN
+                BEGIN
+                    BEGIN
+                        SELECT
+                            account_number,
+                            party_id,
+                            cust_account_id
+                        INTO
+                            x_account_number,
+                            x_party_id,
+                            x_cust_account_id
+                        FROM
+                            apps.hz_cust_accounts
+                        WHERE
+                            cust_account_id = create_customer_rec.old_customer_id;
+
+                    EXCEPTION
+                        WHEN no_data_found THEN
+                            x_account_number := NULL;
+                            x_party_id := NULL;
+                            x_cust_account_id := NULL;
+                        WHEN OTHERS THEN
+                            x_account_number := NULL;
+                            x_party_id := NULL;
+                            x_cust_account_id := NULL;
+                    END;
+
+                    fnd_file.put_line(fnd_file.log, 'x_cust_account_id :' || x_cust_account_id);
+                    fnd_file.put_line(fnd_file.log, 'x_account_number :' || x_account_number);
+                    fnd_file.put_line(fnd_file.log, 'x_party_id :' || x_party_id);
+                END;
+            ELSE
+                BEGIN
+                    v_check_act := 0;
+                    BEGIN
+                        SELECT
+                            COUNT(1)
+                        INTO v_check_act
+                        FROM
+                            apps.hz_cust_accounts
+                        WHERE
+                                attribute19 = to_char(create_customer_rec.agency_id)
+                            AND attribute_category = create_customer_rec.customer_type;
+
+                    END;
+
+                    IF v_check_act > 0 THEN
+                        BEGIN
+                            BEGIN
+                                SELECT
+                                    account_number,
+                                    party_id,
+                                    cust_account_id
+                                INTO
+                                    x_account_number,
+                                    x_party_id,
+                                    x_cust_account_id
+                                FROM
+                                    apps.hz_cust_accounts
+                                WHERE
+                                        attribute19 = to_char(create_customer_rec.agency_id)
+                                    AND attribute_category = create_customer_rec.customer_type;
+
+                            EXCEPTION
+                                WHEN no_data_found THEN
+                                    x_account_number := NULL;
+                                    x_party_id := NULL;
+                                    x_cust_account_id := NULL;
+                                WHEN OTHERS THEN
+                                    x_account_number := NULL;
+                                    x_party_id := NULL;
+                                    x_cust_account_id := NULL;
+                            END;
+
+                            fnd_file.put_line(fnd_file.log, 'x_cust_account_id :' || x_cust_account_id);
+                            fnd_file.put_line(fnd_file.log, 'x_account_number :' || x_account_number);
+                            fnd_file.put_line(fnd_file.log, 'x_party_id :' || x_party_id);
+                        END;
+                    ELSE
+                        BEGIN
+                            x_account_number := NULL;
+                            x_party_id := NULL;
+                            x_cust_account_id := NULL;
+---Values assigned to the Customer Account Record Type
+                 --- custAcccountRec.account_number     := create_customer_rec.agency_id;-----newCustRec.account_number;
+                            custacccountrec.account_name := create_customer_rec.account_description;
+                            custacccountrec.attribute19 := create_customer_rec.agency_id;
+                        --- create_customer_rec.customer_number;
+                            custacccountrec.attribute20 := to_char(sysdate, 'DD-MON-YYYY HH24:MI:SS');
+                            custacccountrec.attribute10 := create_customer_rec.abc_type;
+                        ----create_customer_rec.customer_id;
+                            custacccountrec.status := 'A';
+                            custacccountrec.attribute_category := create_customer_rec.customer_type;
+                            custacccountrec.customer_type := 'R';
+                            custacccountrec.customer_class_code := create_customer_rec.customer_class_code;
+                            custacccountrec.created_by_module := 'TCA_V2_API';
+----Values assinged to the Party Record Type.
+                            custpartyrec.status := 'A';
+                            custorgrec.organization_name := create_customer_rec.customer_name;
+                            custorgrec.party_rec.attribute_category := create_customer_rec.customer_type;
+                            custorgrec.party_rec.status := 'A';
+                            custorgrec.party_rec.attribute20 := main_unit1.unit;
+                            custorgrec.party_rec.attribute19 := create_customer_rec.account_description;
+                            custorgrec.created_by_module := 'TCA_V2_API';
+                            custorgrec.party_rec := custpartyrec;
+                        /*API to create customer account, party and customer profile*/
+                            hz_cust_account_v2pub.create_cust_account(
+                                p_init_msg_list        => 'T',
+                                p_cust_account_rec     => custacccountrec,
+                                p_organization_rec     => custorgrec,
+                                p_customer_profile_rec => custprofilerec,
+                                p_create_profile_amt   => 'F',
+                                x_cust_account_id      => x_cust_account_id,
+                                x_account_number       => x_account_number,
+                                x_party_id             => x_party_id,
+                                x_party_number         => x_party_number,
+                                x_profile_id           => x_profile_id,
+                                x_return_status        => x_return_status,
+                                x_msg_count            => x_msg_count,
+                                x_msg_data             => x_msg_data
+                            );
+
+                            IF x_return_status = 'S' THEN
+                                COMMIT;
+                                fnd_file.put_line(fnd_file.log, 'Creation of Party of Type Organization and customer account is Successful'
+                                );
+                                fnd_file.put_line(fnd_file.log, 'x_cust_account_id :' || x_cust_account_id);
+                                fnd_file.put_line(fnd_file.log, 'x_account_number :' || x_account_number);
+                                fnd_file.put_line(fnd_file.log, 'x_party_id :' || x_party_id);
+                                lv_party_id := x_party_id;
+                                fnd_file.put_line(fnd_file.log, 'x_party_number :' || x_party_number);
+                                fnd_file.put_line(fnd_file.log, 'x_profile_id :' || x_profile_id);
+                            ELSE
+                                fnd_file.put_line(fnd_file.log, 'Creation of Party of Type Organization and customer account failed:' || x_msg_data
+                                );
+                                ROLLBACK;
+                            END IF;
+
+                        END;
+                    END IF;
+
+                END;
+            END IF;
+
+            FOR create_site_rec IN customer_cur2(create_customer_rec.customer_name, main_unit1.unit, main_unit1.customer_type, create_customer_rec.account_description
+            ) LOOP
+                lv_location_id := 0;
+                IF lv_location_id = 0 THEN
+                    BEGIN
+                        SELECT
+                            location_id
+                        INTO lv_location_id
+                        FROM
+                            hz_locations
+                        WHERE
+                                address1 = create_site_rec.address1
+                        -- AND NVL(address2,'N') = NVL(create_site_rec.address2,'N')
+                        -- AND NVL(address3,'N') = NVL(create_site_rec.address3,'N')
+                        -- AND NVL(address4,'N') = NVL(create_site_rec.address4,'N')
+                            AND city = create_site_rec.city
+                            AND description = create_site_rec.location1;
+
+                    EXCEPTION
+                        WHEN no_data_found THEN
+                            lv_location_id := 0;
+                        WHEN OTHERS THEN
+                            lv_location_id := 0;
+                    END;
+
+                END IF;
+
+                IF lv_location_id = 0 THEN
+                    l_location_rec.address1 := create_site_rec.address1;
+                    l_location_rec.address2 := create_site_rec.address2;
+                    l_location_rec.address3 := create_site_rec.address3;
+                    l_location_rec.address4 := create_site_rec.address4;
+                    l_location_rec.city := create_site_rec.city;
+                    l_location_rec.postal_code := create_site_rec.postal_code;
+                    l_location_rec.state := create_site_rec.state;
+                    l_location_rec.country := create_site_rec.country;
+                    l_location_rec.created_by_module := 'TCA_V2_API';
+                    l_location_rec.description := create_site_rec.location1;
+                    l_location_rec.county := create_site_rec.county;
+                    hz_location_v2pub.create_location(
+                        p_location_rec  => l_location_rec,
+                        x_location_id   => l_location_id,
+                        x_return_status => x_return_status,
+                        x_msg_count     => x_msg_count,
+                        x_msg_data      => x_msg_data
+                    );
+
+                ELSE
+                    l_location_id := lv_location_id;
+                END IF;
+
+                fnd_file.put_line(fnd_file.log, 'API Status      :- ' || x_return_status);
+                IF x_return_status <> 'S' THEN
+                    fnd_file.put_line(fnd_file.log, 'Error           :- ' || x_msg_data);
+                    v_error_msz := v_error_msz || x_msg_data;
+                END IF;
+
+                fnd_file.put_line(fnd_file.log, 'l_location_id   :-' || l_location_id);
+                l_party_site_id := 0;
+                IF l_party_site_id = 0 THEN
+                    BEGIN
+                        SELECT
+                            party_site_id
+                        INTO l_party_site_id
+                        FROM
+                            hz_party_sites
+                        WHERE
+                                party_id = x_party_id
+                            AND location_id = l_location_id
+                            AND party_site_name = create_site_rec.station_name;
+
+                    EXCEPTION
+                        WHEN no_data_found THEN
+                            l_party_site_id := 0;
+                        WHEN OTHERS THEN
+                            l_party_site_id := 0;
+                    END;
+                END IF;
+
+                IF l_party_site_id = 0 THEN
+                    BEGIN
+                        l_party_site_rec.party_id := x_party_id;
+                        l_party_site_rec.location_id := l_location_id;
+                     --l_location_id;
+                        l_party_site_rec.status := 'A';
+                        l_party_site_rec.attribute_category := create_customer_rec.customer_type;
+                        l_party_site_rec.party_site_name := create_site_rec.station_name;
+                     -- l_party_site_rec.party_site_number :=
+                                                 --create_site_rec.centre_number;
+                      ---l_party_site_rec.attribute20 := create_site_rec.party_site_id;
+                        l_party_site_rec.created_by_module := 'TCA_V2_API';
+                                                               ----'HZ_CPUI';
+                     --- l_party_site_rec.party_site_name := create_site_rec.city;
+                        hz_party_site_v2pub.create_party_site(
+                            p_party_site_rec    => l_party_site_rec,
+                            x_party_site_id     => l_party_site_id,
+                            x_party_site_number => l_party_site_number,
+                            x_return_status     => x_return_status,
+                            x_msg_count         => x_msg_count,
+                            x_msg_data          => x_msg_data
+                        );
+
+                        fnd_file.put_line(fnd_file.log, 'API Status      :- ' || x_return_status);
+                        IF x_return_status <> 'S' THEN
+                            fnd_file.put_line(fnd_file.log, 'Error           :- ' || x_msg_data);
+                            v_error_msz := v_error_msz || x_msg_data;
+                        END IF;
+
+                        fnd_file.put_line(fnd_file.log, 'Party id    :-' || x_party_id);
+                        fnd_file.put_line(fnd_file.log, 'party_site_id   :-' || l_party_site_id);
+                    END;
+                END IF;
+
+                l_cust_acct_site_id := 0;
+                IF l_cust_acct_site_id = 0 THEN
+                    BEGIN
+                        SELECT
+                            cust_acct_site_id
+                        INTO l_cust_acct_site_id
+                        FROM
+                            hz_cust_acct_sites_all
+                        WHERE
+                                cust_account_id = x_cust_account_id
+                            AND party_site_id = l_party_site_id;
+
+                    EXCEPTION
+                        WHEN no_data_found THEN
+                            l_cust_acct_site_id := 0;
+                        WHEN OTHERS THEN
+                            l_cust_acct_site_id := 0;
+                    END;
+                END IF;
+
+                IF l_cust_acct_site_id = 0 THEN
+                    BEGIN
+                        l_cust_acct_site_rec.cust_account_id := x_cust_account_id;
+                        l_cust_acct_site_rec.party_site_id := l_party_site_id;
+                     --l_party_site_id;
+                        l_cust_acct_site_rec.created_by_module := 'TCA_V2_API';
+                     --l_cust_acct_site_rec.attribute3 := create_site_rec.attribute3;
+                        l_cust_acct_site_rec.attribute_category := create_customer_rec.customer_type;
+                     -- l_cust_acct_site_rec.attribute20 :=
+                                                 ---   create_site_rec.cust_acct_site_id;
+                        l_cust_acct_site_rec.org_id := 288;
+                     --- l_cust_acct_site_id := NULL;
+                        hz_cust_account_site_v2pub.create_cust_acct_site(
+                            p_init_msg_list      => 'T',
+                            p_cust_acct_site_rec => l_cust_acct_site_rec,
+                            x_cust_acct_site_id  => l_cust_acct_site_id,
+                            x_return_status      => x_return_status,
+                            x_msg_count          => x_msg_count,
+                            x_msg_data           => x_msg_data
+                        );
+
+                        fnd_file.put_line(fnd_file.log, 'API Status        :- ' || x_return_status);
+                        IF x_return_status <> 'S' THEN
+                            fnd_file.put_line(fnd_file.log, 'Error             :- ' || x_msg_data);
+                            v_error_msz := substr(v_error_msz || x_msg_data, 1, 550);--------VARUN
+                  --      v_error_msz := v_error_msz || x_msg_data;
+                        END IF;
+
+                        fnd_file.put_line(fnd_file.log, 'cust_acct_site_id :-' || l_cust_acct_site_id);
+                    END;
+                END IF;
+
+               ---  FOR create_billto_rec IN
+               ---     create_billto (create_site_rec.customer_name,
+                 ---                  main_unit1.unit,
+                ---           main_unit1.customer_type
+                ----                  )
+                ---- LOOP
+                lv_term_id := NULL;
+                IF create_site_rec.payment_terms IS NOT NULL THEN
+                    BEGIN
+                        SELECT
+                            term_id
+                        INTO lv_term_id
+                        FROM
+                            apps.ra_terms
+                        WHERE
+                            upper(name) = create_site_rec.payment_terms;
+
+                    EXCEPTION
+                        WHEN no_data_found THEN
+                            lv_term_id := NULL;
+                        WHEN OTHERS THEN
+                            lv_term_id := NULL;
+                    END;
+                END IF;
+
+                mo_global.set_policy_context('S', 288);
+                l_cust_site_use_rec.site_use_code := 'BILL_TO';
+                l_cust_site_use_rec.attribute_category := create_customer_rec.customer_type;
+                l_cust_site_use_rec.cust_acct_site_id := l_cust_acct_site_id;
+                l_cust_site_use_rec.created_by_module := 'TCA_V2_API';
+                l_cust_site_use_rec.org_id := 288;
+                l_cust_site_use_rec.primary_flag := create_site_rec.primary_flag;
+              -- l_cust_site_use_rec.location := SUBSTR(create_site_rec.location1, 1, 40);----------VARUN
+                l_cust_site_use_rec.location := create_site_rec.location1;
+                l_customer_profile_rec.standard_terms := lv_term_id;
+                l_cust_site_use_rec.attribute25 := create_site_rec.centre_number;
+
+               -- l_cust_site_use_rec.attribute3 :=
+                                            -- create_billto_rec.attribute3;
+                --l_cust_site_use_rec.attribute24 :=
+                                       -- create_site_rec.cust_acct_site_id;
+                --l_cust_site_use_rec.bill_to_site_use_id := NULL;
+                BEGIN
+                    SELECT
+                        code_combination_id
+                    INTO v_gl_code
+                    FROM
+                        apps.gl_code_combinations_kfv x
+                    WHERE
+                        x.concatenated_segments = create_site_rec.rec_account;
+
+                EXCEPTION
+                    WHEN OTHERS THEN
+                        BEGIN
+                            BEGIN
+                                SELECT
+                                    id_flex_num
+                                INTO ln_id_flex_num
+                                FROM
+                                    apps.fnd_id_flex_structures
+                                WHERE
+                                        id_flex_code = 'GL#'
+                                    AND id_flex_structure_code = 'AUPL_Chart_Of_Account';
+
+                            EXCEPTION
+                                WHEN OTHERS THEN
+                                    ln_id_flex_num := NULL;
+                            END;
+
+                            BEGIN
+                                l_status := fnd_flex_keyval.validate_segs('CREATE_COMBINATION', 'SQLGL', 'GL#', ln_id_flex_num, create_site_rec.rec_account
+                                ,
+                                                                          'V', sysdate, 'ALL', NULL, NULL,
+                                                                          NULL, NULL, FALSE, FALSE, NULL,
+                                                                          NULL, NULL);
+
+                                BEGIN
+                                    SELECT
+                                        code_combination_id
+                                    INTO v_gl_code
+                                    FROM
+                                        gl_code_combinations_kfv a
+                                    WHERE
+                                        concatenated_segments = create_site_rec.rec_account;
+
+                                EXCEPTION
+                                    WHEN OTHERS THEN
+                                        v_gl_code := 0;
+                                END;
+
+                            END;
+
+                        END;
+                END;          
+                l_cust_site_use_rec.gl_id_rec := v_gl_code;
+               -- l_cust_site_use_rec.gl_id_rev := lv_rev_id;
+                hz_cust_account_site_v2pub.create_cust_site_use(
+                    p_init_msg_list        => 'T',
+                    p_cust_site_use_rec    => l_cust_site_use_rec,
+                    p_customer_profile_rec => l_customer_profile_rec,
+                    x_site_use_id          => l_cust_acct_site_use_id,
+                    x_return_status        => x_return_status,
+                    x_msg_count            => x_msg_count,
+                    x_msg_data             => x_msg_data
+                );
+                IF  x_return_status = fnd_api.g_ret_sts_success THEN
+    COMMIT;
+    --DBMS_OUTPUT.PUT_LINE('Creation of Customer Accnt Site use is Successful ');
+    fnd_file.put_line(fnd_file.log, 'Creation of Customer Accnt Site use is Successful ');
+    DBMS_OUTPUT.PUT_LINE('Output information ....');   
+    DBMS_OUTPUT.PUT_LINE('Site Use Id = '||x_site_use_id);
+    DBMS_OUTPUT.PUT_LINE('Site Use    = '||l_cust_site_use_rec.site_use_code);     
+ELSE
+   -- DBMS_OUTPUT.put_line ('Creation of Customer Accnt Site use got failed:'||x_msg_data);
+    fnd_file.put_line(fnd_file.log, 'Creation of Customer Accnt Site use got failed:'||x_msg_data);
+    ROLLBACK;
+    FOR i IN 1 .. x_msg_count
+    LOOP
+      x_msg_data := fnd_msg_pub.get( p_msg_index => i, p_encoded => 'F');
+      dbms_output.put_line( i|| ') '|| x_msg_data);
+    END LOOP;
+END IF; 
+
+                fnd_file.put_line(fnd_file.log, 'API Status                        :- ' || x_return_status);
+                IF x_return_status <> 'S' THEN
+                    fnd_file.put_line(fnd_file.log, 'Error                             :- ' || x_msg_data);
+                    v_error_msz := substr(v_error_msz || x_msg_data, 1, 550);-----VARUN
+
+             --     v_error_msz := v_error_msz || x_msg_data;
+                END IF;
+
+                fnd_file.put_line(fnd_file.log, 'l_cust_acct_site_use_id Bill To:-' || l_cust_acct_site_use_id);
+
+               --- END LOOP;
+                UPDATE aucustom.au_customer_ship_to@ebstohr
+                SET
+                    erp_customer_id = x_cust_account_id,
+                    erp_site_use_id = l_cust_acct_site_use_id,
+                    erp_party_id = x_party_id,
+                    approve_flag = 'Y',
+                    erp_customer_number = x_account_number,
+                    last_update_date = sysdate
+                WHERE
+                        agency_id = create_site_rec.agency_id
+                    AND centre_number = create_site_rec.centre_number;
+commit;
+                IF v_error_msz IS NULL THEN
+                    UPDATE xxau_agency_approval_detials@ebstohr
+                    SET
+                        error_msz = 'Success',
+                        erp_process_flag = 'S',
+                        erp_customer_id = x_cust_account_id,
+                        erp_site_use_id = l_cust_acct_site_use_id,
+                        erp_party_id = x_party_id,
+                        erp_cust_acct_site_id = l_cust_acct_site_id,
+                        erp_location_id = l_location_id,
+                        erp_customer_number = x_account_number,
+                        last_updated_date = sysdate
+                    WHERE
+                            agency_id = create_site_rec.agency_id
+                        AND centre_number = create_site_rec.centre_number;
+commit;
+                ELSE
+                    UPDATE xxau_agency_approval_detials@ebstohr
+                    SET
+                        error_msz = substr(v_error_msz, 1, 550),--v_error_msz,---------VARUN
+                        erp_process_flag = 'E',
+                        erp_customer_id = x_cust_account_id,
+                        erp_site_use_id = l_cust_acct_site_use_id,
+                        erp_party_id = x_party_id,
+                        erp_cust_acct_site_id = l_cust_acct_site_id,
+                        erp_location_id = l_location_id,
+                        erp_customer_number = x_account_number,
+                        last_updated_date = sysdate
+                    WHERE
+                            agency_id = create_site_rec.agency_id
+                        AND centre_number = create_site_rec.centre_number;
+commit;
+                END IF;
+
+                COMMIT;
+            END LOOP;
+
+            IF create_customer_rec.old_customer_id IS NULL THEN
+                BEGIN
+                  -------------------------------------create contact person -----------------------------------------------
+                    IF create_customer_rec.contact_person IS NOT NULL THEN
+                        BEGIN
+                            fnd_file.put_line(fnd_file.log, 'enter contact person creation');
+                            lv2_org_contact_id := 0;
+                            fnd_file.put_line(fnd_file.log, 'lv2_org_contact_id' || lv2_org_contact_id);
+                            IF lv2_org_contact_id = 0 THEN
+                                BEGIN
+                                    lv_person_rec.person_first_name := create_customer_rec.contact_person;
+                                    lv_person_rec.person_last_name := '1';
+                                    lv_person_rec.party_rec.status := 'A';
+                                    lv_person_rec.created_by_module := 'TCA_V1_API';
+                              --
+                                    hz_party_v2pub.create_person(
+                                        p_init_msg_list => apps.fnd_api.g_false,
+                                        p_person_rec    => lv_person_rec,
+                                        x_party_id      => lv1_party_id,
+                                        x_party_number  => lv1_party_number,
+                                        x_profile_id    => lv1_profile_id,
+                                        x_return_status => x_return_status,
+                                        x_msg_count     => x_msg_count,
+                                        x_msg_data      => x_msg_data
+                                    );
+
+                              --
+                              --Capturing error if not success
+                              --
+                                    IF x_return_status <> apps.fnd_api.g_ret_sts_success THEN
+                                        FOR i IN 1..fnd_msg_pub.count_msg LOOP
+                                            fnd_msg_pub.get(
+                                                p_msg_index     => i,
+                                                p_encoded       => apps.fnd_api.g_false,
+                                                p_data          => x_msg_data,
+                                                p_msg_index_out => lv_msg_index_out
+                                            );
+
+                                            lv_api_message := lv_api_message
+                                                              || ' ~ '
+                                                              || x_msg_data;
+                                            fnd_file.put_line(fnd_file.log, 'Error: ' || lv_api_message);
+                                        END LOOP;
+                                    ELSIF ( x_return_status = apps.fnd_api.g_ret_sts_success ) THEN
+                                        fnd_file.put_line(fnd_file.log, '***************************');
+                                        fnd_file.put_line(fnd_file.log, 'Output information ....');
+                                        fnd_file.put_line(fnd_file.log, 'Success');
+                                        fnd_file.put_line(fnd_file.log, 'contact person id : ' || lv1_party_id);
+                                        fnd_file.put_line(fnd_file.log, '***************************');
+                                    END IF;
+
+                                END;
+
+                                lv_org_contact_rec.party_rel_rec.relationship_code := 'CONTACT_OF';
+                                lv_org_contact_rec.party_rel_rec.relationship_type := 'CONTACT';
+                                lv_org_contact_rec.party_rel_rec.subject_id := lv1_party_id;
+                                lv_org_contact_rec.party_rel_rec.subject_type := 'PERSON';
+                                lv_org_contact_rec.party_rel_rec.subject_table_name := 'HZ_PARTIES';
+                                lv_org_contact_rec.party_rel_rec.object_type := 'ORGANIZATION';
+                                lv_org_contact_rec.party_rel_rec.object_id := x_party_id;
+                           --<< this is hz_parties.party_id of the Customer (main organization/party)>>
+                                lv_org_contact_rec.party_rel_rec.object_table_name := 'HZ_PARTIES';
+                                lv_org_contact_rec.party_rel_rec.start_date := sysdate;
+                                lv_org_contact_rec.created_by_module := 'TCA_V1_API';
+                                hz_party_contact_v2pub.create_org_contact(
+                                    p_init_msg_list   => fnd_api.g_true,
+                                    p_org_contact_rec => lv_org_contact_rec,
+                                    x_org_contact_id  => lv2_org_contact_id,
+                                    x_party_rel_id    => lv2_party_rel_id,
+                                    x_party_id        => lv2_party_id,
+                                    x_party_number    => lv2_party_number,
+                                    x_return_status   => x_return_status,
+                                    x_msg_count       => x_msg_count,
+                                    x_msg_data        => x_msg_data
+                                );
+
+                           --
+                           --Capturing error if not success
+                           --
+                                IF x_return_status <> fnd_api.g_ret_sts_success THEN
+                                    FOR i IN 1..fnd_msg_pub.count_msg LOOP
+                                        fnd_msg_pub.get(
+                                            p_msg_index     => i,
+                                            p_encoded       => fnd_api.g_false,
+                                            p_data          => x_msg_data,
+                                            p_msg_index_out => lv_msg_index_out
+                                        );
+
+                                        lv_api_message := lv_api_message
+                                                          || ' ~ '
+                                                          || x_msg_data;
+                                    END LOOP;
+
+                                    fnd_file.put_line(fnd_file.log, 'Error: ' || lv_api_message);
+                                ELSIF ( x_return_status = fnd_api.g_ret_sts_success ) THEN
+                                    fnd_file.put_line(fnd_file.log, '***************************');
+                                    fnd_file.put_line(fnd_file.log, 'Output information ....');
+                                    fnd_file.put_line(fnd_file.log, 'Success');
+                                    fnd_file.put_line(fnd_file.log, 'lv_org_contact_id: ' || lv2_org_contact_id);
+                                    fnd_file.put_line(fnd_file.log, 'lv_party_id: ' || lv2_party_id);
+                                    fnd_file.put_line(fnd_file.log, 'lv_party_rel_id: ' || lv2_party_rel_id);
+                                    fnd_file.put_line(fnd_file.log, '***************************');
+                                END IF;
+
+                            END IF;
+
+                        END;
+                    END IF;
+
+-------------------------------------create mobile no-------------------------------------------------------
+                    IF create_customer_rec.mobile_no IS NOT NULL THEN
+                        BEGIN
+                            v_check1 := 0;
+                            IF v_check1 = 0 THEN
+                                BEGIN
+                                    SELECT
+                                        COUNT(1)
+                                    INTO v_check1
+                                    FROM
+                                        hz_parties
+                                    WHERE
+                                            party_id = lv_party_id
+                                        AND primary_phone_number IS NULL;
+
+                                EXCEPTION
+                                    WHEN no_data_found THEN
+                                        v_check1 := 1;
+                                    WHEN OTHERS THEN
+                                        v_check1 := 1;
+                                END;
+
+                            END IF;
+
+                            IF v_check1 = 1 THEN
+                                BEGIN
+                                    lv_contact_point_rec.contact_point_type := 'PHONE';
+                                    lv_contact_point_rec.contact_point_purpose := 'BUSINESS';
+                                    lv_contact_point_rec.created_by_module := 'TCA_V1_API';
+                                    lv_contact_point_rec.status := 'A';
+                                    lv_email_rec.email_format := 'HTML';
+                                    lv_email_rec.email_address := NULL;
+                                    lv_phone_rec.phone_area_code := NULL;
+                                    lv_phone_rec.phone_number := create_customer_rec.mobile_no;
+                                    lv_phone_rec.phone_extension := NULL;
+                                    lv_contact_point_rec.owner_table_name := 'HZ_PARTIES';
+                                    lv_contact_point_rec.owner_table_id := x_party_id;
+                                    lv_phone_rec.phone_line_type := 'MOBILE';
+                                    hz_contact_point_v2pub.create_contact_point(
+                                        p_init_msg_list     => fnd_api.g_true,
+                                        p_contact_point_rec => lv_contact_point_rec,
+                                        p_email_rec         => lv_email_rec,
+                                        p_phone_rec         => lv_phone_rec,
+                                        x_contact_point_id  => lv_contact_point_id,
+                                        x_return_status     => x_return_status,
+                                        x_msg_count         => x_msg_count,
+                                        x_msg_data          => x_msg_data
+                                    );
+
+                              --
+                              --Capturing error if not success
+                              --
+                                    IF x_return_status <> fnd_api.g_ret_sts_success THEN
+                                        FOR i IN 1..fnd_msg_pub.count_msg LOOP
+                                            fnd_msg_pub.get(
+                                                p_msg_index     => i,
+                                                p_encoded       => fnd_api.g_false,
+                                                p_data          => x_msg_data,
+                                                p_msg_index_out => lv_msg_index_out
+                                            );
+
+                                            lv_api_message := substr(lv_api_message
+                                                                     || ' , '
+                                                                     || x_msg_data, 1, 4000);------VARUN
+
+--                                    lv_api_message:=
+--                                         lv_api_message || ' ~ ' || x_msg_data;
+                                            fnd_file.put_line(fnd_file.log, 'Error:' || lv_api_message);
+                                        END LOOP;
+                                    ELSIF ( x_return_status = fnd_api.g_ret_sts_success ) THEN
+                                        fnd_file.put_line(fnd_file.log, '***************************');
+                                        fnd_file.put_line(fnd_file.log, 'Output information ....');
+                                        fnd_file.put_line(fnd_file.log, 'Success');
+                                        fnd_file.put_line(fnd_file.log, 'lv_contact_point_id: ' || lv_contact_point_id);
+                                        fnd_file.put_line(fnd_file.log, '***************************');
+                                    END IF;
+
+                                END;
+                            END IF;
+
+                        END;
+
+                    END IF;
+
+                END;
+            END IF;
+
+            UPDATE aucustom.xxau_customer_details@ebstohr
+            SET
+                process_flag = 'Y',
+                error_msz = 'customer_id-'
+                            || x_cust_account_id
+                            || '-party_site_id-'
+                            || l_party_site_id
+                            || '-cust_acct_site_id-'
+                            || l_cust_acct_site_id
+                            || '-site_use_id-'
+                            || l_cust_acct_site_use_id
+            WHERE
+                    unit = create_customer_rec.unit
+                AND customer_name = create_customer_rec.customer_name
+                AND customer_type = create_customer_rec.customer_type
+                AND agency_id = create_customer_rec.agency_id;
+commit;
+            IF (
+                create_customer_rec.old_customer_id IS NULL
+                AND create_customer_rec.customer_type IN ( 'Circulation Customers' )
+            ) THEN
+                UPDATE aucustom.au_customer_master_new@ebstohr
+                SET
+                    erp_customer_id = x_cust_account_id,
+                    erp_party_id = lv_party_id,
+                    approve_flag = 'Y',
+                    erp_customer_number = x_account_number,
+                    last_update_date = sysdate
+                WHERE
+                        agency_id = create_customer_rec.agency_id
+                    AND agency_name = create_customer_rec.customer_name;
+commit;
+            END IF;
+
+        END LOOP;
+    END LOOP;
+
+    COMMIT;
+END XXAU_CREATE_CUSTOMERS_1;
+/
