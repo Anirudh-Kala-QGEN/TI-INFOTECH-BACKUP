@@ -1,0 +1,694 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- HISTORY                                                                                     -->
+<!-- Ver          Date            Name              Comments                                     -->
+<!-- =====        =========       ===========       ===================================          -->
+<!-- 1.0          03-APR-2018     Akhtar Ali          Initial Version                            -->
+<!-- 2.0          12-SEP-2018     Sanjay Kumar        Changes done against JIRA AS-21             -->
+<!-- 4.0          29-JAN-2019     Sumit Sharma        Changes done against JIRA AS-266           -->
+<!--                                                  (NEED ADDL PARAMETRE IN AP PARTY WISE REPORT)-->
+<!-- 4.1          08-SEP-2019     Sumit Kumar         Tax Category Parameter Issue Fixed          --> 
+<!-- 4.2          27-FEB-2020     Sumit Kumar         Add Invoice Status field (Kapil Tyagi )     --> 
+<!-- 4.2          23-Nov-2021     Sumit Kumar         Add ITC Availability,
+                                                          Reason for ITC Unavailability,
+														  Date of GSTR-1 Filed,
+														  Filing Period of GSTR 1/5
+                                                           (Discussed with Kapil Tyagi )          -->
+<!-- ==================================================================================           -->
+<dataTemplate name="Gstinput"  version="1.0">
+<properties>
+<property name="scalable_mode" value="on"/>
+<property name="debug_mode" value="on" />
+<property name="xml_tag_case" value="upper" />
+<property name="include_parameters" value="false"/>
+</properties>
+<parameters>
+<parameter name="p_org_id"      dataType= "CHARACTER" />
+<parameter name="p_unit"      dataType= "CHARACTER" />
+<parameter name="p_vendor_cat"      dataType= "CHARACTER" />
+<parameter name="p_from_date"      dataType= "DATE" />
+<parameter name="p_to_date"      dataType= "DATE" />  
+<parameter name="p_tax_type"      dataType= "CHARACTER" /> 
+</parameters>
+<dataQuery>
+<sqlStatement name="HDR">
+<![CDATA[
+select a.vendor_id,
+       E.ATTRIBUTE9,
+        a.vendor_site_id,
+        a.INVOICE_ID,
+        b.LINE_NUMBER,
+        d.segment1 unit,
+       a.invoice_num,
+	   a.GLOBAL_ATTRIBUTE1,
+	   a.GLOBAL_ATTRIBUTE2,
+       e.vendor_name,
+       e.segment1 vendor_num,
+       f.vendor_site_code,
+  	   (Select TAG from apps.fnd_lookup_values flv
+            where flv.LOOKUP_TYPE ='XXAU_GST UNIT_STATE_WITH_GSTNO'
+            and flv.LOOKUP_CODE=d.segment1 and rownum<=1) State_GSTIN,
+		(Select replace(replace(replace(DESCRIPTION,'AUPL_'),'_Org'),'_ORG') from apps.fnd_lookup_values flv
+            where flv.LOOKUP_TYPE ='XXAU_GST UNIT_STATE_WITH_GSTNO'
+            and flv.LOOKUP_CODE=d.segment1 and rownum<=1) Place_of_Supply_State,
+       --------change by sumit (ChETAN REQ)---------------------
+	       CASE
+          WHEN :p_org_id = 386 
+             THEN (SELECT FILLING_PERIOD_OF_GSTR_1_5 FROM XXAU_GST_INPUT_MONTH@ebstohr
+                          WHERE   INVOICE_ID = a.invoice_id and org_id=:p_org_id and rownum<=1)
+          WHEN :p_org_id = 288 
+             THEN (SELECT FILLING_PERIOD_OF_GSTR_1_5 FROM XXAU_GST_INPUT_MONTH@ebstohr
+                          WHERE INVOICE_ID = a.invoice_id and org_id=:p_org_id and rownum<=1) 
+          ELSE NULL
+       END GST_CLAIM_MONTH, 
+       CASE
+          WHEN a.vendor_id = 41149 AND invoice_date <= '31-OCT-2019'
+             THEN '09AAACM6054H1ZG'
+          WHEN a.vendor_id = 41149 AND invoice_date >= '01-NOV-2019'
+             THEN '09AAACM6054H2ZF'
+          WHEN a.attribute_category = 'GST Details'
+          AND a.attribute1 IS NOT NULL
+             THEN a.attribute1
+          ELSE ((xxau_gst_utility_pkg.tp_registration_number@ebstohr
+                                                            (a.vendor_id,
+                                                             a.vendor_site_id,
+                                                             'GST',
+                                                             'S'
+                                                            )
+                )
+               )
+       END gst_no,
+	    ------------------------------------------------
+		gsti.GSTR_2A_2B_STATUS GSTR_2A_STATUS,
+        gsti.ITC_AVAILABLITY its_avail,
+        gsti.REASON_OF_ITC_UNAVAILABLITY reason ,
+        to_char(gsti.DATE_OF_GSTR_FILLED ,'DD-MON-YYYY')  gstr_date,
+        gsti.FILLING_PERIOD_OF_GSTR_1_5 gstr_period,
+       -------------------------------------------------
+     /* (SELECT ITC_AVAILABLITY
+          FROM XXAU_GST_INPUT_MONTH@ebstohr
+         WHERE INVOICE_ID = a.invoice_id
+		 and org_id=:p_org_id) its_avail,
+       (SELECT REASON_OF_ITC_UNAVAILABLITY
+          FROM XXAU_GST_INPUT_MONTH@ebstohr
+         WHERE INVOICE_ID = a.invoice_id
+		 and org_id=:p_org_id ) reason,   
+       (SELECT to_char(DATE_OF_GSTR_FILLED,'DD-MON-YYYY') 
+          FROM XXAU_GST_INPUT_MONTH@ebstohr
+         WHERE INVOICE_ID = a.invoice_id
+		 and org_id=:p_org_id) gstr_date,    
+       (SELECT FILLING_PERIOD_OF_GSTR_1_5
+          FROM XXAU_GST_INPUT_MONTH@ebstohr
+         WHERE INVOICE_ID = a.invoice_id
+		 and org_id=:p_org_id) gstr_period, 
+       ---------------------------------
+       (select b1.REGISTRATION_NUMBER
+          from jai_party_regs a1,
+               jai_party_reg_lines b1
+         where 1=1
+            and a1.party_reg_id = b1.party_reg_id
+            and a1.party_id = a.vendor_id
+            and a1.party_site_id = a.vendor_site_id
+            and a1.PARTY_TYPE_CODE = 'THIRD_PARTY_SITE'
+            and a1.SUPPLIER_FLAG = 'Y'
+            and a1.site_flag = 'Y'
+            and b1.REGISTRATION_TYPE_CODE = 'GSTIN'
+            and TRUNC(SYSDATE) BETWEEN NVL(b1.EFFECTIVE_FROM,SYSDATE) 
+            and NVL(b1.EFFECTIVE_TO,SYSDATE+1) --V2.0
+            and rownum<=1) GST_No,*/
+        (select b1.REGISTRATION_NUMBER
+          from jai_party_regs a1,
+               jai_party_reg_lines b1
+         where 1=1
+            and a1.party_reg_id = b1.party_reg_id
+            and a1.party_id = a.vendor_id
+            and a1.party_site_id = a.vendor_site_id
+            and a1.PARTY_TYPE_CODE = 'THIRD_PARTY_SITE'
+            and a1.SUPPLIER_FLAG = 'Y'
+            and a1.site_flag = 'Y'
+            and b1.REGISTRATION_TYPE_CODE = 'PAN'
+            and TRUNC(SYSDATE) BETWEEN NVL(b1.EFFECTIVE_FROM,SYSDATE) 
+            and NVL(b1.EFFECTIVE_TO,SYSDATE+1) --V2.0
+            and rownum<=1
+			) PAN_No,
+       --- e.vendor_type_lookup_code,
+        e.attribute1 ven_sub_cat,
+        a.invoice_type_lookup_code,
+        a.invoice_amount,
+        to_char(a.invoice_date,'DD-MON-YYYY') invoice_date,
+        --   to_char(a.gl_date,'DD-MON-YYYY') gl_date,
+     (SELECT max(to_char(ACCOUNTING_DATE,'DD-MON-YYYY'))
+             FROM AP_INVOICE_DISTRIBUTIONS_ALL
+            WHERE 1=1 
+              --AND INVOICE_ID='3857269'
+              AND INVOICE_ID = a.invoice_id
+              AND LINE_TYPE_LOOKUP_CODE in ('ACCRUAL','ITEM')
+              AND INVOICE_LINE_NUMBER = c.INVOICE_LINE_NUMBER
+        --   AND ROWNUM=1
+              ) gl_date,
+        (select a1.segment1 from po_headers_all a1 where a1.po_header_id = b.po_header_id) po_num,
+        (select a1.RECEIPT_NUM
+          from RCV_SHIPMENT_headers a1,
+               RCV_SHIPMENT_LINES b1
+         where 1=1
+           and a1.SHIPMENT_HEADER_ID = b1.SHIPMENT_HEADER_ID
+           and b1.SHIPMENT_LINE_ID = b.RCV_SHIPMENT_LINE_ID
+           and rownum<=1) Receipt_Number,
+        d.concatenated_segments Account_code,
+       (select a.DESCRIPTION 
+          from fnd_flex_values_vl a,
+               fnd_flex_value_sets b
+         where 1=1
+           and a.FLEX_VALUE_SET_ID = b.FLEX_VALUE_SET_ID
+           and a.flex_value = d.segment5
+           and b.FLEX_VALUE_SET_NAME IN ('AUPL_Natural_Account','IPPL_Natural Account')) Account_Desc,
+        (g.line_amt + nvl((select sum(a1.ROUNDED_TAX_AMT_TAX_CURR)
+          from jai_tax_lines a1
+         where a1.det_factor_id  = g.det_factor_id
+           and a1.tax_rate_code not like '%GST%'
+           and a1.tax_line_num in (select x1.PRECEDENCE_1 from jai_tax_lines x1 where x1.tax_rate_code like '%GST%' and x1.det_factor_id  = g.det_factor_id union all
+                           select x1.PRECEDENCE_2 from jai_tax_lines x1 where x1.tax_rate_code like '%GST%' and x1.det_factor_id  = g.det_factor_id union all
+                           select x1.PRECEDENCE_3 from jai_tax_lines x1 where x1.tax_rate_code like '%GST%' and x1.det_factor_id  = g.det_factor_id union all
+                           select x1.PRECEDENCE_4 from jai_tax_lines x1 where x1.tax_rate_code like '%GST%' and x1.det_factor_id  = g.det_factor_id union all
+                           select x1.PRECEDENCE_5 from jai_tax_lines x1 where x1.tax_rate_code like '%GST%' and x1.det_factor_id  = g.det_factor_id)),0)) basic_amt,
+        nvl((select a1.reporting_code
+             from jai_reporting_codes a1
+            where a1.reporting_code_id = g.hsn_code_id
+              and a1.REPORTING_TYPE_ID = 10000),
+            (select a1.reporting_code
+             from jai_reporting_codes a1
+            where a1.reporting_code_id = g.sac_code_id
+              and a1.REPORTING_TYPE_ID = 10002))  hsn_code,
+       b.ATTRIBUTE10 Tax_Nature,
+       nvl((select sum(a1.ROUNDED_TAX_AMT_TAX_CURR)
+         from jai_tax_lines a1
+        where a1.tax_rate_code like '%CGST%'
+          and a1.det_factor_id = g.det_factor_id),0) -
+         nvl(nvl((select sum(a1.RECOVERED_AMOUNT) 
+            from JAI_RGM_RECOVERY_LINES a1 ,jai_tax_lines b1
+           where a1.tax_line_id=b1.tax_line_id
+             and b1.det_factor_id = g.det_factor_id
+             and b1.tax_rate_code like '%CGST%'
+             and a1.PROCESSED_DATE <= :p_to_date
+             and a1.STATUS = 'RECOVERED'),
+        (select sum(a1.RECOVERED_AMOUNT)
+                                          FROM  jai_tax_lines jtl
+                                               ,jai_rgm_recovery_lines a1
+                                               ,rcv_shipment_lines rsl
+                                          WHERE jtl.TRX_ID        = rsl.SHIPMENT_HEADER_ID
+                                          AND jtl.TRX_LINE_ID     = rsl.SHIPMENT_LINE_ID
+                                          AND jtl.APPLICATION_ID  = 707
+                                          AND jtl.ENTITY_CODE     = 'RCV_TRANSACTION'
+                                          AND a1.tax_line_id      = jtl.tax_line_id
+                                          AND jtl.tax_rate_code like '%CGST%'
+                                          AND a1.PROCESSED_DATE   <= :p_to_date
+                                          AND a1.STATUS            = 'RECOVERED'
+                                          AND rsl.SHIPMENT_LINE_ID = b.RCV_SHIPMENT_LINE_ID)),0)+ 
+         nvl(nvl((select sum(a1.RECOVERED_AMOUNT) 
+            from JAI_RGM_RECOVERY_LINES a1 ,jai_tax_lines b1
+           where a1.tax_line_id=b1.tax_line_id
+             and b1.det_factor_id = g.det_factor_id
+             and b1.tax_rate_code like '%CGST%'
+             and a1.PROCESSED_DATE <= :p_to_date
+             and a1.STATUS = 'RECOVERED'),
+        (select sum(a1.RECOVERED_AMOUNT)
+                                          FROM  jai_tax_lines jtl
+                                               ,jai_rgm_recovery_lines a1
+                                               ,rcv_shipment_lines rsl
+                                          WHERE jtl.TRX_ID        = rsl.SHIPMENT_HEADER_ID
+                                          AND jtl.TRX_LINE_ID     = rsl.SHIPMENT_LINE_ID
+                                          AND jtl.APPLICATION_ID  = 707
+                                          AND jtl.ENTITY_CODE     = 'RCV_TRANSACTION'
+                                          AND a1.tax_line_id      = jtl.tax_line_id
+                                          AND jtl.tax_rate_code like '%CGST%'
+                                          AND a1.PROCESSED_DATE   <= :p_to_date
+                                          AND a1.STATUS            = 'RECOVERED'
+                                          AND rsl.SHIPMENT_LINE_ID = b.RCV_SHIPMENT_LINE_ID)),0) cgst_input_amt,
+       -----------add by sumit ----------------------------------------------------------                                           
+       nvl((select sum(a1.ROUNDED_TAX_AMT_TAX_CURR)
+         from jai_tax_lines a1
+        where a1.tax_rate_code like '%SGST%'
+          and a1.det_factor_id = g.det_factor_id),0) +
+       nvl((select sum(a1.ROUNDED_TAX_AMT_TAX_CURR)
+         from jai_tax_lines a1
+        where a1.tax_rate_code like '%UTGST%'
+          and a1.det_factor_id = g.det_factor_id),0) +
+       nvl(nvl((select sum(a1.RECOVERED_AMOUNT) 
+            from JAI_RGM_RECOVERY_LINES a1 ,jai_tax_lines b1
+           where a1.tax_line_id=b1.tax_line_id
+             and b1.det_factor_id = g.det_factor_id
+             and b1.tax_rate_code like '%SGST%'
+             and a1.PROCESSED_DATE <= :p_to_date
+             and a1.STATUS = 'RECOVERED'),(select sum(a1.RECOVERED_AMOUNT)
+                                          FROM  jai_tax_lines jtl
+                                               ,jai_rgm_recovery_lines a1
+                                               ,rcv_shipment_lines rsl
+                                          WHERE jtl.TRX_ID        = rsl.SHIPMENT_HEADER_ID
+                                          AND jtl.TRX_LINE_ID     = rsl.SHIPMENT_LINE_ID
+                                          AND jtl.APPLICATION_ID  = 707
+                                          AND jtl.ENTITY_CODE     = 'RCV_TRANSACTION'
+                                          AND a1.tax_line_id      = jtl.tax_line_id
+                                          AND jtl.tax_rate_code like '%SGST%'
+                                          AND a1.PROCESSED_DATE   <= :p_to_date
+                                          AND a1.STATUS            = 'RECOVERED'
+                                          AND rsl.SHIPMENT_LINE_ID = b.RCV_SHIPMENT_LINE_ID)),0)-
+        nvl(nvl((select sum(a1.RECOVERED_AMOUNT) 
+            from JAI_RGM_RECOVERY_LINES a1 ,jai_tax_lines b1
+           where a1.tax_line_id=b1.tax_line_id
+             and b1.det_factor_id = g.det_factor_id
+             and b1.tax_rate_code like '%SGST%'
+             and a1.PROCESSED_DATE <= :p_to_date
+             and a1.STATUS = 'RECOVERED'),(select sum(a1.RECOVERED_AMOUNT)
+                                          FROM  jai_tax_lines jtl
+                                               ,jai_rgm_recovery_lines a1
+                                               ,rcv_shipment_lines rsl
+                                          WHERE jtl.TRX_ID        = rsl.SHIPMENT_HEADER_ID
+                                          AND jtl.TRX_LINE_ID     = rsl.SHIPMENT_LINE_ID
+                                          AND jtl.APPLICATION_ID  = 707
+                                          AND jtl.ENTITY_CODE     = 'RCV_TRANSACTION'
+                                          AND a1.tax_line_id      = jtl.tax_line_id
+                                          AND jtl.tax_rate_code like '%SGST%'
+                                          AND a1.PROCESSED_DATE   <= :p_to_date
+                                          AND a1.STATUS            = 'RECOVERED'
+                                          AND rsl.SHIPMENT_LINE_ID = b.RCV_SHIPMENT_LINE_ID)),0) +
+        nvl(nvl((select sum(a1.RECOVERED_AMOUNT) 
+            from JAI_RGM_RECOVERY_LINES a1 ,jai_tax_lines b1
+           where a1.tax_line_id=b1.tax_line_id
+             and b1.det_factor_id = g.det_factor_id
+             and b1.tax_rate_code like '%UTGST%'
+             and a1.PROCESSED_DATE <= :p_to_date
+             and a1.STATUS = 'RECOVERED'),(select sum(a1.RECOVERED_AMOUNT)
+                                          FROM  jai_tax_lines jtl
+                                               ,jai_rgm_recovery_lines a1
+                                               ,rcv_shipment_lines rsl
+                                          WHERE jtl.TRX_ID        = rsl.SHIPMENT_HEADER_ID
+                                          AND jtl.TRX_LINE_ID     = rsl.SHIPMENT_LINE_ID
+                                          AND jtl.APPLICATION_ID  = 707
+                                          AND jtl.ENTITY_CODE     = 'RCV_TRANSACTION'
+                                          AND a1.tax_line_id      = jtl.tax_line_id
+                                          AND jtl.tax_rate_code like '%UTGST%'
+                                          AND a1.PROCESSED_DATE   <= :p_to_date
+                                          AND a1.STATUS            = 'RECOVERED'
+                                          AND rsl.SHIPMENT_LINE_ID = b.RCV_SHIPMENT_LINE_ID)),0) -
+        nvl(nvl((select sum(a1.RECOVERED_AMOUNT) 
+            from JAI_RGM_RECOVERY_LINES a1 ,jai_tax_lines b1
+           where a1.tax_line_id=b1.tax_line_id
+             and b1.det_factor_id = g.det_factor_id
+             and b1.tax_rate_code like '%UTGST%'
+             and a1.PROCESSED_DATE <= :p_to_date
+             and a1.STATUS = 'RECOVERED'),(select sum(a1.RECOVERED_AMOUNT)
+                                          FROM  jai_tax_lines jtl
+                                               ,jai_rgm_recovery_lines a1
+                                               ,rcv_shipment_lines rsl
+                                          WHERE jtl.TRX_ID        = rsl.SHIPMENT_HEADER_ID
+                                          AND jtl.TRX_LINE_ID     = rsl.SHIPMENT_LINE_ID
+                                          AND jtl.APPLICATION_ID  = 707
+                                          AND jtl.ENTITY_CODE     = 'RCV_TRANSACTION'
+                                          AND a1.tax_line_id      = jtl.tax_line_id
+                                          AND jtl.tax_rate_code like '%UTGST%'
+                                          AND a1.PROCESSED_DATE   <= :p_to_date
+                                          AND a1.STATUS            = 'RECOVERED'
+                                          AND rsl.SHIPMENT_LINE_ID = b.RCV_SHIPMENT_LINE_ID)),0) sgst_utgst_input_amt,
+      ---------add by sumit -------------------------------------------------------------    
+       nvl((select sum(a1.ROUNDED_TAX_AMT_TAX_CURR)
+         from jai_tax_lines a1
+        where a1.tax_rate_code like '%IGST%'
+          and a1.det_factor_id = g.det_factor_id),0) +
+        nvl(nvl((select sum(a1.RECOVERED_AMOUNT) 
+            from JAI_RGM_RECOVERY_LINES a1 ,jai_tax_lines b1
+           where a1.tax_line_id=b1.tax_line_id
+             and b1.det_factor_id = g.det_factor_id
+             and b1.tax_rate_code like '%IGST%'
+             and a1.PROCESSED_DATE <= :p_to_date
+             and a1.STATUS = 'RECOVERED'),(select sum(a1.RECOVERED_AMOUNT)
+                                          FROM  jai_tax_lines jtl
+                                               ,jai_rgm_recovery_lines a1
+                                               ,rcv_shipment_lines rsl
+                                          WHERE jtl.TRX_ID        = rsl.SHIPMENT_HEADER_ID
+                                          AND jtl.TRX_LINE_ID     = rsl.SHIPMENT_LINE_ID
+                                          AND jtl.APPLICATION_ID  = 707
+                                          AND jtl.ENTITY_CODE     = 'RCV_TRANSACTION'
+                                          AND a1.tax_line_id      = jtl.tax_line_id
+                                          AND jtl.tax_rate_code like '%IGST%'
+                                          AND a1.PROCESSED_DATE   <= :p_to_date
+                                          AND a1.STATUS            = 'RECOVERED'
+                                          AND rsl.SHIPMENT_LINE_ID = b.RCV_SHIPMENT_LINE_ID)),0)-              
+       nvl(nvl((select sum(a1.RECOVERED_AMOUNT) 
+            from JAI_RGM_RECOVERY_LINES a1 ,jai_tax_lines b1
+           where a1.tax_line_id=b1.tax_line_id
+             and b1.det_factor_id = g.det_factor_id
+             and b1.tax_rate_code like '%IGST%'
+             and a1.PROCESSED_DATE <= :p_to_date
+             and a1.STATUS = 'RECOVERED'),(select sum(a1.RECOVERED_AMOUNT)
+                                          FROM  jai_tax_lines jtl
+                                               ,jai_rgm_recovery_lines a1
+                                               ,rcv_shipment_lines rsl
+                                          WHERE jtl.TRX_ID        = rsl.SHIPMENT_HEADER_ID
+                                          AND jtl.TRX_LINE_ID     = rsl.SHIPMENT_LINE_ID
+                                          AND jtl.APPLICATION_ID  = 707
+                                          AND jtl.ENTITY_CODE     = 'RCV_TRANSACTION'
+                                          AND a1.tax_line_id      = jtl.tax_line_id
+                                          AND jtl.tax_rate_code like '%IGST%'
+                                          AND a1.PROCESSED_DATE   <= :p_to_date
+                                          AND a1.STATUS            = 'RECOVERED'
+                                          AND rsl.SHIPMENT_LINE_ID = b.RCV_SHIPMENT_LINE_ID)),0) igst_input_amt,  
+         (SELECT DISTINCT x.status
+                     FROM (SELECT DISTINCT status
+                                      FROM jai_rgm_recovery_lines
+                                     WHERE document_id = a.invoice_id
+									   ---and a.invoice_id not in 3703130
+                                       AND ROWNUM <=1
+                           UNION ALL
+                           SELECT status
+                             FROM jai_rgm_recovery_lines
+                            WHERE document_number =
+                                     (SELECT a1.receipt_num
+                                        FROM rcv_shipment_headers a1,
+                                             rcv_shipment_lines b1
+                                       WHERE 1 = 1
+                                         AND a1.shipment_header_id =
+                                                         b1.shipment_header_id
+                                         AND b1.shipment_line_id = b.rcv_shipment_line_id
+                                         AND ROWNUM <=1)
+                              AND  ROWNUM <=1) x where ROWNUM <=1) recovered_flag,  										  
+    -----add by sumit -------------------          
+       NVL((SELECT SUM (a1.rounded_tax_amt_tax_curr)
+           FROM jai_tax_lines a1
+        WHERE a1.tax_rate_code LIKE '%CESS_NON%'
+          AND a1.det_factor_id = g.det_factor_id),0) cess_amt,     
+    -----------------------------      
+     
+       /*nvl((select sum(a1.ROUNDED_TAX_AMT_TAX_CURR)
+         from jai_tax_lines a1
+        where a1.tax_rate_code not like '%GST%'
+          and a1.PRECEDENCE_1 is not null
+          and a1.det_factor_id = g.det_factor_id),0)*/
+       /* nvl((select sum(a1.ROUNDED_TAX_AMT_TAX_CURR)
+          from jai_tax_lines a1
+         where a1.det_factor_id  = g.det_factor_id
+           and a1.tax_rate_code not like '%GST%'
+           and a1.tax_line_num in (select x1.PRECEDENCE_1 from jai_tax_lines x1 where x1.tax_rate_code like '%GST%' and x1.det_factor_id  = g.det_factor_id union all
+                           select x1.PRECEDENCE_2 from jai_tax_lines x1 where x1.tax_rate_code like '%GST%' and x1.det_factor_id  = g.det_factor_id union all
+                           select x1.PRECEDENCE_3 from jai_tax_lines x1 where x1.tax_rate_code like '%GST%' and x1.det_factor_id  = g.det_factor_id union all
+                           select x1.PRECEDENCE_4 from jai_tax_lines x1 where x1.tax_rate_code like '%GST%' and x1.det_factor_id  = g.det_factor_id union all
+                           select x1.PRECEDENCE_5 from jai_tax_lines x1 where x1.tax_rate_code like '%GST%' and x1.det_factor_id  = g.det_factor_id)),0)  others_amt,  */     
+       (select sum(a1.TAX_RATE_PERCENTAGE)
+         from jai_tax_lines a1
+        where a1.det_factor_id = g.det_factor_id
+          and a1.tax_rate_code like '%GST%') tax_rate,
+       (select ORIGINAL_TAX_INVOICE_NUM from JAI_TAX_DET_FACTORS  where  DET_FACTOR_ID =G.DET_FACTOR_ID and rownum=1) ORG_TAX_INV,  
+       (select TO_CHAR(ORIGINAL_TAX_INVOICE_DATE ,'DD-MON-YYYY') from JAI_TAX_DET_FACTORS  where DET_FACTOR_ID =G.DET_FACTOR_ID and rownum=1) ORG_TAX_INV_DT, 
+	   (SELECT org.organization_code FROM ORG_ORGANIZATION_DEFINITIONS org,
+               jai_tax_det_factors jai
+         WHERE 1 = 1
+           AND org.organization_id = jai.organization_id
+           AND jai.det_factor_id =g.det_factor_id ) ORG_CODE,   
+ --------------------------
+       nvl(nvl((select sum(a1.RECOVERED_AMOUNT) 
+          from JAI_RGM_RECOVERY_LINES a1,jai_tax_lines b1
+           where a1.tax_line_id=b1.tax_line_id
+             and b1.det_factor_id = g.det_factor_id
+             and a1.PROCESSED_DATE <= :p_to_date
+             and a1.STATUS = 'RECOVERED'),(select sum(a1.RECOVERED_AMOUNT)
+                                          FROM  jai_tax_lines jtl
+                                               ,jai_rgm_recovery_lines a1
+                                               ,rcv_shipment_lines rsl
+                                          WHERE jtl.TRX_ID        = rsl.SHIPMENT_HEADER_ID
+                                          AND jtl.TRX_LINE_ID     = rsl.SHIPMENT_LINE_ID
+                                          AND jtl.APPLICATION_ID  = 707
+                                          AND jtl.ENTITY_CODE     = 'RCV_TRANSACTION'
+                                          AND a1.tax_line_id      = jtl.tax_line_id
+                                          AND a1.PROCESSED_DATE   <= :p_to_date
+                                          AND a1.STATUS            = 'RECOVERED'
+                                          AND rsl.SHIPMENT_LINE_ID = b.RCV_SHIPMENT_LINE_ID)),0) recvd_amt,
+       /*(select substr(a1.tax_type_name,6)
+          from jai_tax_types a1 ,jai_tax_lines b1
+         where a1.tax_type_id=b1.tax_type_id
+           and b1.det_factor_id = g.det_factor_id
+           and rownum<=1)*/
+       (select replace(replace(replace(replace(a1.tax_type_name,'CGST_'),'SGST_'),'IGST_'),'UTGST_')
+          from jai_tax_types a1 ,jai_tax_lines b1
+         where a1.tax_type_id=b1.tax_type_id
+           and b1.det_factor_id = g.det_factor_id
+           and a1.tax_type_name like '%GST%'
+           and rownum<=1) tax_type,
+     ( select RECOVERABLE_FLAG 
+         from jai_tax_lines a1
+        where 1=1
+          AND ((a1.tax_rate_code like '%IGST%') OR (a1.tax_rate_code like '%SGST%') OR (a1.tax_rate_code like '%UGST%')OR (a1.tax_rate_code like '%CGST%'))
+          and a1.det_factor_id = g.det_factor_id
+          and rownum<=1) REC_FLAG, 
+          /* (SELECT to_char(ACAX.check_date,'DD-MON-YYYY') 
+            FROM ap_checks_all ACAX
+                ,ap_invoice_payments_all AIPX
+            WHERE ACAX.check_id = AIPX.check_id
+            AND AIPX.invoice_id =  A.invoice_id
+            AND ROWNUM <= 1) payment_date 
+            (SELECT to_char(y.PDATE,'DD-MON-YYYY') FROM
+              (
+              SELECT DISTINCT ACAX.check_date PDATE
+              FROM ap_checks_all ACAX
+                  ,ap_invoice_payments_all AIPX
+              WHERE ACAX.check_id = AIPX.check_id
+                AND AIPX.invoice_id =  A.invoice_id
+            
+            UNION
+            
+            select DISTINCT ACCOUNTING_DATE PDATE
+             FROM  ap_invoice_lines_all x
+             WHERE x.invoice_id = A.invoice_id 
+               AND x.PREPAY_INVOICE_ID is not null            
+            )Y WHERE ROWNUM = 1) payment_date,*/
+ /* (select TO_CHAR(MAX(AIPV.ACCOUNTING_DATE),'DD-MON-YYYY') 
+                 from ap_invoices_all aia,  AP_INVOICE_PAYMENT_HISTORY_V aipv--- AP_INVOICE_PAYMENTS_ALL aipv
+                where vendor_id = a.vendor_id
+                and vendor_site_id= F.vendor_site_id
+                and aia.invoice_id=a.invoice_id
+                and aia.invoice_id=aipv.invoice_id
+                AND aipv.ORG_ID=:p_org_id 
+                AND NVL(AIPV.VOID,'N')='N'
+                )    payment_date,*/
+      (select TO_CHAR(max(x.Pay_date),'DD-MON-YYYY')  from
+         (SELECT MAX(ACCOUNTING_DATE) Pay_date
+              FROM  AP_INVOICE_DISTRIBUTIONS_ALL 
+             WHERE INVOICE_ID   = a.invoice_id
+                  ---and INVOICE_ID   = :P_INVOICE_ID
+                  AND LINE_TYPE_LOOKUP_CODE ='PREPAY'
+              UNION 
+          select MAX(AIPV.ACCOUNTING_DATE) Pay_date
+                 from ap_invoices_all aia,  AP_INVOICE_PAYMENT_HISTORY_V aipv--- AP_INVOICE_PAYMENTS_ALL aipv
+                where  1=1
+             ---   AND vendor_id =9186 
+                AND vendor_id = a.vendor_id
+                and vendor_site_id= F.vendor_site_id
+             --   and aia.invoice_id = :P_INVOICE_ID
+            --    and vendor_site_id  = 75883
+                and aia.invoice_id=a.invoice_id
+                and aia.invoice_id=aipv.invoice_id
+                AND aipv.ORG_ID=:p_org_id 
+                AND NVL(AIPV.VOID,'N')='N')x)   payment_date,            
+            (SELECT SEGMENT1 FROM MTL_SYSTEM_ITEMS_B WHERE INVENTORY_ITEM_ID = B.INVENTORY_ITEM_ID AND ORGANIZATION_ID in (287,444) and rownum<=1) ITEM_NAME,
+            B.ITEM_DESCRIPTION,
+            (  select DESCRIPTION 
+                   from FND_LOOKUP_VALUES 
+                   Where lookup_type = 'XX_ITEM_ACCOUNT_LOOKUP'
+                    and lookup_code IN (SELECT SEGMENT1 FROM MTL_SYSTEM_ITEMS_B WHERE INVENTORY_ITEM_ID = B.INVENTORY_ITEM_ID AND ORGANIZATION_ID in (287,444))) EXPENSE_ACCOUNT,
+-----------------Sumit--------------
+       (SELECT DECODE (apps.ap_invoices_pkg.get_approval_status
+                                                   (i.invoice_id,
+                                                    i.invoice_amount,
+                                                    i.payment_status_flag,
+                                                    i.invoice_type_lookup_code
+                                                   ),
+                   'NEVER APPROVED', 'Never Validated',
+                   'NEEDS REAPPROVAL', 'Needs Revalidation',
+                   'CANCELLED', 'Cancelled',
+                   'Validated'
+                  ) invoice_status   --  V 4.2
+          FROM ap_invoices_all i
+         WHERE 1 = 1
+           AND i.invoice_num = a.invoice_num
+           AND i.invoice_id = a.invoice_iD) INVOICE_STATUS
+------------------------------------------   				
+  from ap_invoices_all a,
+       ap_invoice_lines_all b,
+       (select ( select * from (select DIST_CODE_COMBINATION_ID from ap_invoice_distributions_all
+    where invoice_id=x.invoice_id
+    and INVOICE_LINE_NUMBER=x.INVOICE_LINE_NUMBER    
+    order by DISTRIBUTION_LINE_NUMBER desc) where rownum=1) DIST_CODE_COMBINATION_ID,x.invoice_id,x.INVOICE_LINE_NUMBER
+          from ap_invoice_distributions_all x
+         where x.org_id = :p_org_id
+         group by x.invoice_id,x.INVOICE_LINE_NUMBER) c,
+       Gl_Code_Combinations_kfv d,
+       ap_suppliers e,
+       ap_supplier_sites_all f,
+       jai_tax_det_factors g,
+	   aucustom.XXAU_GST_INPUT_MONTH@ebstohr gsti
+ where a.invoice_id = b.invoice_id
+   and b.invoice_id = c.invoice_id
+   AND a.invoice_id = GSTI.invoice_id(+)
+   and b.LINE_NUMBER = c.INVOICE_LINE_NUMBER
+   and c.DIST_CODE_COMBINATION_ID = d.CODE_COMBINATION_ID
+   ---and a.vendor_id =30413
+   and a.vendor_id = e.vendor_id
+   and a.vendor_id = f.vendor_id
+   and a.vendor_site_id = f.vendor_site_id
+   and a.org_id = f.org_id
+   and g.APPLICATION_ID =  200
+   and g.EVENT_CLASS_CODE =  'STANDARD INVOICES'
+   and g.ENTITY_CODE = 'AP_INVOICES'
+   and g.TRX_ID = a.invoice_id
+   and g.TRX_LINE_ID = b.line_number
+   --and nvl(c.line_type_lookup_code,'X')<> 'MISCELLANEOUS'
+   and nvl(b.line_type_lookup_code,'X')<> 'MISCELLANEOUS'
+  --** and a.CANCELLED_DATE is null
+   and a.org_id = :p_org_id
+   ---and a.invoice_id in (4448271)
+   and a.gl_date between :p_from_date and :p_to_date  
+   and d.segment1 = NVL(:P_UNIT,d.segment1) --V2.0
+   and exists (select 1 
+					   from jai_tax_types a1 ,jai_tax_lines b1
+							 where a1.tax_type_id=b1.tax_type_id
+							   and a1.tax_type_name like '%GST%'
+							   and b1.det_factor_id = g.det_factor_id
+							   --AND DECODE(replace(replace(replace(replace(A1.tax_type_name,'CGST_'),'SGST_'),'IGST_'),'UTGST_'),'REC','R','N')=:p_tax_type /*Chanes done against JIRA AS-266 */--V4.1
+							   AND DECODE(NVL(a1.RECOVERABLE_FLAG,'N'),'Y','R','N') = :p_tax_type --V4.1
+							   and rownum<=1 )
+   and not exists (select 1 
+                    from jai_tax_lines a1,
+                         jai_tax_types b1
+                   where a1.tax_type_id = b1.tax_type_id
+                     and b1.TAX_TYPE_NAME like  '%REV%'
+                     and a1.det_factor_id = g.det_factor_id)   
+   and exists
+   (SELECT 1 FROM   
+(
+SELECT jra.REPORTING_CODE
+FROM JAI_reporting_associations jra ,jai_party_regs jpr
+WHERE  jra.REPORTING_TYPE_NAME = 'Vendor Classification' 
+AND    jra.REPORTING_CODE = 'Composite'
+AND    jpr.PARTY_REG_ID = jra.ENTITY_ID
+AND    jpr.PARTY_TYPE_CODE = 'THIRD_PARTY'
+AND    jpr.SUPPLIER_FLAG = 'Y'
+AND    jpr.party_id = a.vendor_id
+AND    :P_VENDOR_CAT = 'Composite'
+AND    TRUNC(SYSDATE) BETWEEN TRUNC(NVL(JRA.EFFECTIVE_FROM,SYSDATE))
+AND TRUNC(NVL(JRA.EFFECTIVE_TO,SYSDATE+1))
+
+UNION ALL
+SELECT '1'
+                    FROM DUAL
+                   WHERE 1 = 1
+                     AND :p_vendor_cat =
+                            CASE
+                               WHEN xxau_gst_utility_pkg.tp_registration_number@ebstohr
+                                                            (a.vendor_id,
+                                                             a.vendor_site_id,
+                                                             'GST',
+                                                             'S'
+                                                            ) IS NULL
+                                  THEN 'Unregistered'
+                               WHEN xxau_gst_utility_pkg.tp_registration_number@ebstohr
+                                                            (a.vendor_id,
+                                                             a.vendor_site_id,
+                                                             'GST',
+                                                             'S'
+                                                            ) <>
+                                                                'Unregistered'
+                                  THEN 'Registered'
+                               ELSE 'Unregistered'
+                            END) x)
+
+/*
+SELECT jprl.REGISTRATION_NUMBER
+ FROM jai_party_regs jpr,
+      jai_party_reg_lines jprl
+WHERE 1=1
+   AND jpr.party_reg_id = jprl.party_reg_id
+   AND jpr.party_id     = a.vendor_id
+   AND jpr.party_site_id = a.vendor_site_id
+   AND jpr.PARTY_TYPE_CODE = 'THIRD_PARTY_SITE'
+   AND jpr.SUPPLIER_FLAG   = 'Y'
+   AND jpr.site_flag = 'Y'
+   AND jprl.REGISTRATION_TYPE_CODE = 'GSTIN'
+   AND jprl.REGISTRATION_NUMBER <> 'Unregistered'
+   AND :P_VENDOR_CAT = 'Registered'
+   AND TRUNC(SYSDATE) BETWEEN NVL(jprl.EFFECTIVE_FROM,SYSDATE) 
+   AND NVL(jprl.EFFECTIVE_TO,SYSDATE+1)
+
+UNION ALL   
+
+SELECT jprl.REGISTRATION_NUMBER
+ FROM jai_party_regs jpr,
+      jai_party_reg_lines jprl
+WHERE 1=1
+      AND jpr.party_reg_id(+) = jprl.party_reg_id
+      AND jpr.party_id(+)     = a.vendor_id
+      AND jpr.party_site_id(+) = a.vendor_site_id
+   --AND jpr.PARTY_TYPE_CODE = 'THIRD_PARTY_SITE'
+     AND jpr.SUPPLIER_FLAG(+)   = 'Y'
+     AND jpr.site_flag(+) = 'Y'
+     AND jprl.REGISTRATION_TYPE_CODE(+) = 'GSTIN'
+     AND jprl.REGISTRATION_NUMBER(+) = 'Unregistered'
+     AND :P_VENDOR_CAT = 'Unregistered'
+     AND TRUNC(SYSDATE) BETWEEN NVL(jprl.EFFECTIVE_FROM,SYSDATE) 
+     AND NVL(jprl.EFFECTIVE_TO,SYSDATE+1)
+)X)*/                     
+]]>
+</sqlStatement>
+</dataQuery> 
+<dataStructure>
+<group name="G_HDR" source="HDR">
+<element name="UNIT" value="UNIT"/>
+<element name="INVOICE_NUMBER" value="INVOICE_NUM"/>
+<element name="SUPPLIER_NAME" value="VENDOR_NAME"/>
+<element name="GST_RETURN_TYPE" value="ATTRIBUTE9"/>
+<element name="GST_CLAIM_MONTH" value="GST_CLAIM_MONTH"/>
+<element name="GSTR_2A_STATUS" value="GSTR_2A_STATUS"/>
+<element name="SUPPLIER_NUMBER" value="VENDOR_NUM"/>
+<element name="VENDOR_GST_NO" value="GST_No"/>
+<element name="VENDOR_PAN_NO" value="PAN_No"/>
+<element name="VEN_SUB_CAT" value="VEN_SUB_CAT"/>
+<element name="ACCOUNT_CODE" value="ACCOUNT_CODE"/>
+<element name="ACCOUNT_DESC" value="ACCOUNT_DESC"/>
+<element name="INVOICE_TYPE " value="INVOICE_TYPE_LOOKUP_CODE"/>
+<element name="INVOICE_AMOUNT" value="INVOICE_AMOUNT"/>
+<element name="INVOICE_DATE" value="INVOICE_DATE"/>
+<element name="GL_DATE" value="GL_DATE"/>
+<element name="PO_NUMBER" value="PO_NUM"/>
+<element name="RECEIPT_NUMBER" value="RECEIPT_NUMBER"/>
+<element name="BASIC " value="BASIC_AMT"/>
+<element name="HSN_CODE" value="HSN_CODE"/>
+<element name="VENDOR_ID" value="VENDOR_ID"/>
+<element name="VENDOR_SITE_ID" value="VENDOR_SITE_ID"/>
+<element name="INVOICE_ID" value="INVOICE_ID"/>
+<element name="LINE_NUMBER" value="LINE_NUMBER"/>
+<element name="TAX_NATURE" value="TAX_NATURE"/>
+<element name="CGST_INPUT_AMT" value="CGST_INPUT_AMT"/>
+<element name="SGST_UTGST_INPUT_AMT" value="SGST_UTGST_INPUT_AMT"/>
+<element name="IGST_INPUT_AMT" value="IGST_INPUT_AMT"/>
+<element name="Recovered_Flag" value="Recovered_Flag"/>
+<element name="REC_FLAG" value="REC_FLAG"/>
+<element name="State_GSTIN" value="State_GSTIN"/>
+<element name="Place_of_Supply_State" value="Place_of_Supply_State"/>
+<element name="RECVD_AMT" value="RECVD_AMT"/>
+<element name="TAX_TYPE" value="TAX_TYPE"/>
+<element name="TAX_RATE" value="TAX_RATE"/>
+<element name="ORG_TAX_INV" value="ORG_TAX_INV"/>
+<element name="ORG_TAX_INV_DT" value="ORG_TAX_INV_DT"/>
+<element name="ORG_CODE" value="ORG_CODE"/>
+<element name="CESS_AMT" value="CESS_AMT"/>
+<element name="OTHERS_AMT" value="OTHERS_AMT"/>
+<element name="PAYMENT_DATE" value="PAYMENT_DATE"/>
+<element name="ITEM_NAME" value="ITEM_NAME"/>
+<element name="ITEM_DESCRIPTION" value="ITEM_DESCRIPTION"/>
+<element name="EXPENSE_ACCOUNT" value="EXPENSE_ACCOUNT"/>
+<element name="INVOICE_STATUS" value="INVOICE_STATUS"/>
+<element name="ITS_AVAIL" value="ITS_AVAIL"/>
+<element name="REASON" value="REASON"/>
+<element name="GSTR_DATE" value="GSTR_DATE"/>
+<element name="GSTR_PERIOD" value="GSTR_PERIOD"/>
+<element name="SUPPLIER_INV_NO" value="GLOBAL_ATTRIBUTE1"/>
+<element name="SUPPLIER_INV_DATE" value="GLOBAL_ATTRIBUTE2"/>
+</group>   
+</dataStructure>
+</dataTemplate>
