@@ -1,0 +1,562 @@
+PROCEDURE xxa_ar_dcr_receipt_p3 (
+      errbuf    OUT      VARCHAR2,
+      retcode   OUT      NUMBER,
+      p_unit    IN       VARCHAR2 DEFAULT NULL,
+      p_date    IN       DATE DEFAULT NULL                              --V1.0
+   )
+/*  *************************************************************************************
+  $Version                 xxa_ar_dcr_receipt_p3       v1.0
+  Name:                    xxa_ar_dcr_receipt_p3
+  Author:                  Ankush Goel
+  Creation Date            15-APR-2021
+
+  DESCRIPTION              This procedure is used for creating the single
+                           AU_Receipt_Info Receipt wise.
+
+******************************************************************************************/
+   IS
+      PRAGMA AUTONOMOUS_TRANSACTION;
+
+      CURSOR unit (p_unit1 VARCHAR2)
+      IS
+         (SELECT organization_id, organization_code, flex_value
+            FROM xxau_accounting_unit_new
+           WHERE organization_code NOT IN ('HSO')
+             AND flex_value = NVL (p_unit, flex_value));
+
+      CURSOR c1 (p_unit1 VARCHAR2)      --------------------for normal receipt
+      IS
+         SELECT tt.composite_receipt_id, tt.serial_number, tt.party_number,
+                tt.party_name, tt.party_location, tt.receipt_number,
+                tt.party_amt, tt.attribute_category, tt.attribute1,
+                tt.attribute2, tt.attribute3, tt.attribute4, tt.attribute5,
+                tt.attribute6, tt.attribute7, tt.attribute8, tt.attribute9,
+                tt.attribute10, tt.attribute11, tt.attribute12,
+                tt.attribute13, tt.attribute14, tt.attribute15,
+                tt.process_flag, tt.process_message, tt.process_date,
+                tt.created_by, tt.creation_date, tt.last_updated_by,
+                tt.last_update_date, tt.comments, tt.process_flag12,
+                tt.process_message12, tt.process_date12, tt.receipt_date,
+                tt.chno, tt.bank_acc_id, tt.bank_acc_number, tt.bank_acc_name,
+                tt.doctype, tt.ref_receiptno, tt.ref_receiptdt,
+                tt.ref_doctype, tt.security_flag, tt.cons_type,
+                tt.cons_rcpt_no, tt.cheque_bounce_reason,
+                tt.receipt_method_id, tt.prov_recptdt rct_date,
+                tt.erp_customer_number cust_no, gl.segment1 unit_code
+           FROM addb.addb_xxa_ar_trans_erp_rcpt tt,
+                apps.ar_receipt_method_accounts_all@hrtoebs td2,
+                apps.ar_receipt_methods@hrtoebs td3,
+                apps.gl_code_combinations@hrtoebs gl
+          WHERE tt.receipt_method_id = td3.receipt_method_id
+            AND td3.receipt_method_id = td2.receipt_method_id
+            AND td2.org_id = 288
+            AND td2.end_date IS NULL
+            AND td3.end_date IS NULL
+            AND NVL (process_flag, 'N') = 'N'
+            AND doctype = 'RCR'
+            AND td2.cash_ccid = gl.code_combination_id
+            AND gl.segment1 = NVL (p_unit1, gl.segment1)
+            AND NVL (security_flag, 'N') = 'N'
+           AND cons_rcpt_no is null -----FOR CASH ONLY
+                                              --AND tt.composite_receipt_id=14661
+      ;
+
+               /*SELECT tt.composite_receipt_id, tt.serial_number, tt.party_number,
+                      tt.party_name, tt.party_location, tt.receipt_number,
+                      tt.party_amt, tt.attribute_category, tt.attribute1,
+                      tt.attribute2, tt.attribute3, tt.attribute4, tt.attribute5,
+                      tt.attribute6, tt.attribute7, tt.attribute8, tt.attribute9,
+                      tt.attribute10, tt.attribute11, tt.attribute12,
+                      tt.attribute13, tt.attribute14, tt.attribute15,
+                      tt.process_flag, tt.process_message, tt.process_date,
+                      tt.created_by, tt.creation_date, tt.last_updated_by,
+                      tt.last_update_date, tt.comments, tt.process_flag12,
+                      tt.process_message12, tt.process_date12, tt.receipt_date,
+                      tt.chno, tt.bank_acc_id, tt.bank_acc_number, tt.bank_acc_name,
+                      tt.doctype, tt.ref_receiptno, tt.ref_receiptdt,
+                      tt.ref_doctype, tt.security_flag, tt.cons_type,
+                      tt.cons_rcpt_no, tt.cheque_bounce_reason,
+                      tt.receipt_method_id rcpt_id, tt.prov_recptdt rct_date,
+                      tt.erp_customer_number cust_no, td1.bank_account_id,
+                      td1.bank_acct_use_id, td3.NAME, td3.receipt_method_id,
+
+      --                fv.meaning,
+      --                xxa_hr_util.xxau_hr001_get_new_val_company (fv.attribute1)unit_code1,
+                      gl.segment1 unit_code
+                 FROM addb.addb_xxa_ar_trans_erp_rcpt tt,
+                                                 --commented by Ankush Goel 19-04-21
+      --           auerp.xxa_ar_trans_erp_rcpt tt, --commented by Ankush Goel 19-04-21
+                      apps.ce_bank_acct_uses_all@hrtoebs td1,
+                      apps.ar_receipt_method_accounts_all@hrtoebs td2,
+                      apps.ar_receipt_methods@hrtoebs td3,
+                      apps.gl_code_combinations@hrtoebs gl
+      --                ,apps.fnd_lookup_values@hrtoebs fv
+               WHERE  tt.bank_acc_id = td1.bank_account_id
+                  AND td1.bank_acct_use_id = td2.remit_bank_acct_use_id
+                  AND td2.receipt_method_id = td3.receipt_method_id
+                  AND (    UPPER (td3.NAME) NOT LIKE '%CIR%'
+                       AND UPPER (td3.NAME) NOT LIKE '%MISC%'
+                       AND UPPER (td3.NAME) NOT LIKE '%HDFC_CMS%'
+                       AND UPPER (td3.NAME) NOT LIKE '%TERM LOAN%'
+                       AND UPPER (td3.NAME) NOT LIKE '%INT_SD_RECPT'
+                      )
+                  AND td1.org_id = td2.org_id
+      --            AND fv.lookup_type = 'REVENUE CENTRE MASTER'
+      --            AND tt.attribute4 = fv.lookup_code
+                  AND td1.org_id = 288
+                  AND td2.end_date IS NULL
+                  AND td3.end_date IS NULL
+                  --AND tt.receipt_number='BLY-1819-0000856'
+                  AND NVL (process_flag, 'N') = 'N'
+                  AND doctype = 'RCR'
+                  AND td2.cash_ccid = gl.code_combination_id
+                  AND gl.segment1 = NVL (p_unit1, gl.segment1)
+                  AND NVL (security_flag, 'N') = 'N';*/
+
+      --            AND td3.RECEIPT_METHOD_ID=1034;
+      CURSOR c3 (p_receipt_id NUMBER)
+      IS
+         SELECT d.attribute_category, d.attribute14, d.attribute11
+           FROM addb.addb_xxa_ar_trans_erp_rcpt d
+          WHERE 1 = 1 AND d.composite_receipt_id = p_receipt_id;
+
+      CURSOR ft_update
+      IS
+         (SELECT tt.composite_receipt_id, tt.ROWID row_id,
+                 tt1.cash_receipt_id
+            FROM addb.addb_xxa_ar_trans_erp_rcpt tt,
+                 apps.ar_cash_receipts_all@hrtoebs tt1
+           WHERE 1 = 1                        -----PROCESS_DATE>='27-oct-2021'
+             AND TO_CHAR (tt.composite_receipt_id) = tt1.attribute1
+             AND (tt1.attribute9 = tt.receipt_number OR tt1.attribute9 = tt.ATTRIBUTE11) -- OR ADDED ON 28-04-2026-- VEEBHU 
+             AND NVL (tt.process_flag, 'N') IN ('N', 'E'));
+
+      l_return_status          VARCHAR2 (1);
+      l_msg_count              NUMBER;
+      l_msg_data               VARCHAR2 (4000)                         := NULL;
+      l_cash_receipt_id        NUMBER;
+      l_misc_receipt_id        NUMBER;
+      l_error_mesg             VARCHAR2 (4000)                         := NULL;
+      p_count                  NUMBER;
+      v_rec_trx_id             NUMBER;
+      lv_receipt_method_name   VARCHAR2 (80);
+      ln_receipt_method_id     NUMBER                                     := 0;
+      x_return_status          VARCHAR2 (30)                           := NULL;
+      x_msg_count              NUMBER;
+      x_msg_data               VARCHAR2 (4000)                         := NULL;
+      p_cr_id                  NUMBER;
+      p_misc_receipt_id        NUMBER;
+      v_unit_name              VARCHAR2 (3);
+      err                      VARCHAR2 (400);
+      ebf                      NUMBER;
+      p_attribute_rec_type     apps.ar_receipt_api_pub.attribute_rec_type@hrtoebs;
+      v_receipt_no             VARCHAR2 (40)                           := NULL;
+      v_return_status          VARCHAR2 (1);
+      v_msg_count              NUMBER;
+      v_msg_data               VARCHAR2 (2000);
+      v_context                VARCHAR2 (2);
+      i                        NUMBER;
+      v_receipt_date           DATE;
+      v_revers_date            DATE;
+      v_check                  NUMBER                                     := 0;
+   BEGIN
+      -- DBMS_OUTPUT.put_line ('START');
+      apps.fnd_global.apps_initialize@hrtoebs (2482, 52024, 222);
+      apps.mo_global.set_policy_context@hrtoebs ('S', 288);
+      apps.fnd_file.put_line@hrtoebs (fnd_file.output,
+                                      'Table is empty successfully'
+                                     );
+
+      BEGIN
+         UPDATE addb.addb_xxa_ar_trans_erp_rcpt
+            SET process_message =
+                   'Enter Manually for Payment refund this not a security Refund',
+                process_flag = 'M'
+          WHERE NVL (process_flag, 'N') IN ('N')
+            AND doctype = 'RFD'
+            AND security_flag = 'N';
+
+         aucustom.xxses_debug_prc ('Update table process_flag M to - A ',
+                                   'Update script S2'
+                                  );
+         COMMIT;
+      END;
+
+      BEGIN
+         UPDATE addb.addb_xxa_ar_trans_erp_rcpt
+            SET process_flag = 'N'
+          WHERE NVL (process_flag, 'N') IN ('E')
+            AND process_message =
+                                'Related receipt is already reconciled in ERP';
+
+         aucustom.xxses_debug_prc ('update table in process flag N to - B ',
+                                   'Update scricpt S3'
+                                  );
+         COMMIT;
+      END;
+
+      BEGIN
+         FOR ft IN ft_update
+         LOOP
+            UPDATE addb.addb_xxa_ar_trans_erp_rcpt
+               SET process_flag = 'S',
+                   process_message = 'SUCCESS-' || ft.cash_receipt_id,
+                   process_date = SYSDATE,
+                   process_message12 = 'Through Update Query'
+             WHERE ROWID = ft.row_id
+               AND composite_receipt_id = ft.composite_receipt_id;
+
+            COMMIT;
+         END LOOP;
+      END;
+
+      FOR unit_m IN unit (p_unit)
+      LOOP
+         aucustom.xxses_debug_prc ('Start c1');
+
+         BEGIN
+            FOR i IN c1 (unit_m.flex_value)
+            LOOP
+               l_msg_data := NULL;
+               l_msg_count := NULL;
+               l_return_status := NULL;
+               l_cash_receipt_id := NULL;
+               p_attribute_rec_type.attribute_category :=
+                                                         i.attribute_category;
+               aucustom.xxses_debug_prc
+                          ('p_attribute_rec_type.attribute_category to - C ',
+                           'i.attribute_category....' || i.attribute_category
+                          );
+               p_attribute_rec_type.attribute1 := i.composite_receipt_id;
+               ---------------Reference ID
+               aucustom.xxses_debug_prc
+                                   ('p_attribute_rec_type.attribute1 to - D ',
+                                       'i.composite_receipt_id....'
+                                    || i.composite_receipt_id
+                                   );
+               p_attribute_rec_type.attribute2 := NVL (i.attribute2, 5);
+               -----------------Receipt type
+               aucustom.xxses_debug_prc
+                                   ('p_attribute_rec_type.attribute2 to - E ',
+                                    'i.attribute2....' || i.attribute2
+                                   );
+               p_attribute_rec_type.attribute3 := NVL (i.attribute3, 'N');
+               --------------Dispaly
+               aucustom.xxses_debug_prc
+                                   ('p_attribute_rec_type.attribute3 to - F ',
+                                    'i.attribute3....' || i.attribute3
+                                   );
+               p_attribute_rec_type.attribute4 := NVL (i.attribute4, 'N');
+               ---------------Covering
+               aucustom.xxses_debug_prc
+                                   ('p_attribute_rec_type.attribute4 to - G ',
+                                    'i.attribute4....' || i.attribute4
+                                   );
+               p_attribute_rec_type.attribute6 := NVL (i.attribute6, 'N');
+               ------sgned
+               p_attribute_rec_type.attribute5 := NVL (i.attribute5, 'N');
+               ---------------stamped
+               aucustom.xxses_debug_prc
+                                   ('p_attribute_rec_type.attribute5 to - I ',
+                                    'i.attribute5....' || i.attribute5
+                                   );
+               p_attribute_rec_type.attribute10 := i.attribute12;
+               p_attribute_rec_type.attribute11 := i.attribute13;
+               ---------------bank Name
+            --   p_attribute_rec_type.attribute9 := i.attribute9;
+               p_attribute_rec_type.attribute9 := i.attribute11;
+
+               -------------------compisite_reference_dcr_receipt_no
+               aucustom.xxses_debug_prc
+                                   ('p_attribute_rec_type.attribute9 to - J ',
+                                    'i.attribute9....' || i.attribute9
+                                   );
+               --     p_attribute_rec_type.attribute11 := i.attribute11;
+--               p_attribute_rec_type.attribute14 := i.attribute11; -- COMMENTED ON 30-SEP-2025 ON REQUEST OF NARESH JI (NO Validation Required for DCR Circulation Receipt Number)
+               -- p_attribute_rec_type.attribute13 := i.attribute11; --enabled ON 30-SEP-2025 ON REQUEST OF NARESH JI (NO Validation Required for DCR Circulation Receipt Number) it is IFSC Code
+                p_attribute_rec_type.attribute13 := i.attribute13;           
+    ---------pr receipt
+               aucustom.xxses_debug_prc
+                                  ('p_attribute_rec_type.attribute10 to - K ',
+                                   'i.attribute11....' || i.attribute11
+                                  );
+               p_attribute_rec_type.attribute12 := i.attribute14;
+               -----------------bank branch
+               aucustom.xxses_debug_prc
+                                   ('p_attribute_rec_type.attribute8 to - L ',
+                                    'i.attribute8....' || i.attribute8
+                                   );
+               p_attribute_rec_type.attribute15 := i.attribute15;
+               -------------pr date
+               aucustom.xxses_debug_prc
+                                  ('p_attribute_rec_type.attribute15 to - N ',
+                                   'i.attribute15....' || i.attribute15
+                                  );
+
+               IF i.attribute2 IN ('1', '10', '7')
+               THEN
+                  IF i.chno IS NULL
+                  THEN
+                     v_receipt_no := i.receipt_number;
+                  ELSE
+                     v_receipt_no := i.chno;
+                  END IF;
+               ELSE
+                  v_receipt_no := i.receipt_number;
+               END IF;
+
+               IF p_date IS NULL
+               THEN
+                  ---- v_receipt_date := i.receipt_date;-------------for cio receipt not for DCR
+                  v_receipt_date := TRUNC (SYSDATE);
+               ELSE
+                  --   v_receipt_date := p_date;-------------for cio receipt not for DCR
+                  v_receipt_date := TRUNC (SYSDATE);
+               END IF;
+
+               IF i.party_number IS NOT NULL
+               THEN
+                  -- DBMS_OUTPUT.put_line ('party number not null ');
+                  aucustom.xxses_debug_prc
+                                      ('if party number is not null to - O ',
+                                       'i.party_number....' || i.party_number
+                                      );
+                  apps.ar_receipt_api_pub.create_cash@hrtoebs
+                                  (p_api_version               => 1.0,
+                                   p_init_msg_list             => 'T',
+                                   p_commit                    => 'F',
+                                   p_validation_level          => NULL,--100,  -- ADDED ON 28-04-2026-- VEEBHU REMOVED 100
+                                   x_return_status             => l_return_status,
+                                   x_msg_count                 => l_msg_count,
+                                   x_msg_data                  => l_msg_data,
+                                   p_currency_code             => 'INR',
+                                   p_amount                    => i.party_amt,
+                                   p_receipt_number            => v_receipt_no,
+                                   p_receipt_date              => v_receipt_date,
+                                   p_gl_date                   => v_receipt_date,
+                                   p_comments                  => i.comments,
+                                   p_attribute_rec             => p_attribute_rec_type,
+                                   p_customer_number           => i.cust_no,
+--                                  p_customer_number           => '110155',
+                                   p_receipt_method_id         => i.receipt_method_id,
+                                   p_cr_id                     => l_cash_receipt_id,
+                                   p_global_attribute_rec      => NULL,
+                                   p_org_id                    => 288
+                                  );
+               ELSIF i.party_number IS NULL
+               -- Asked to gaurav for confirmation
+               THEN
+                  aucustom.xxses_debug_prc
+                                          ('if party number is null to - P ',
+                                              'i.party_number....'
+                                           || i.party_number
+                                          );
+                  -- DBMS_OUTPUT.put_line ('party number null ');
+                  apps.ar_receipt_api_pub.create_cash@hrtoebs
+                                  (p_api_version               => 1.0,
+                                   p_init_msg_list             => 'T',
+                                   p_commit                    => 'T',
+                                   p_validation_level          => NULL,--100,  -- ADDED ON 28-04-2026-- VEEBHU REMOVED 100
+                                   x_return_status             => l_return_status,
+                                   x_msg_count                 => l_msg_count,
+                                   x_msg_data                  => l_msg_data,
+                                   p_currency_code             => 'INR',
+                                   p_amount                    => i.party_amt,
+                                   p_receipt_number            => v_receipt_no,
+                                   p_receipt_date              => v_receipt_date,
+                                   p_comments                  => i.comments,
+                                   p_gl_date                   => v_receipt_date,
+                                   p_attribute_rec             => p_attribute_rec_type,
+                                   p_receipt_method_id         => i.receipt_method_id,
+                                   p_cr_id                     => l_cash_receipt_id,
+                                   p_global_attribute_rec      => NULL,
+                                   p_org_id                    => 288
+                                  );
+               END IF;
+
+--------------------------------------------------------
+           -- DBMS_OUTPUT.put_line ('id  ' || l_cash_receipt_id);
+               aucustom.xxses_debug_prc ('if case_receipt_id is null to - Q ',
+                                            'l_cash_receipt_id....'
+                                         || l_cash_receipt_id
+                                        );
+
+               IF l_cash_receipt_id IS NULL
+               THEN
+                  BEGIN
+                     IF l_msg_count = 1
+                     THEN
+                        l_error_mesg := l_msg_data;
+                        aucustom.xxses_debug_prc ('l_msg_data ' || l_msg_data);
+                     ELSIF l_msg_count > 1
+                     THEN
+                        l_msg_data := NULL;
+
+                        LOOP
+                           p_count := p_count + 1;
+                           l_msg_data := NULL;
+                           l_msg_data := l_msg_data;
+
+                           IF l_msg_data IS NULL
+                           THEN
+                              EXIT;
+                           END IF;
+                        END LOOP;
+
+                        l_error_mesg := l_error_mesg || '-' || l_msg_data;
+                        aucustom.xxses_debug_prc (   'Message'
+                                                  || p_count
+                                                  || '.'
+                                                  || l_error_mesg
+                                                 );
+                     END IF;
+
+                     aucustom.xxses_debug_prc
+                                           ('if case_receipt_id null to - T ',
+                                            l_error_mesg
+                                           );   --'L_REC_CNT....'||L_REC_CNT);
+                     aucustom.xxses_debug_prc ('COMP ID to - U',
+                                               i.composite_receipt_id
+                                              );
+                     --'L_REC_CNT....'||L_REC_CNT);
+                     aucustom.xxses_debug_prc ('Rcpt ID to - V ',
+                                               i.receipt_number
+                                              );
+                     --'L_REC_CNT....'||L_REC_CNT);
+                     aucustom.xxses_debug_prc ('srno ID to - W ',
+                                               i.serial_number
+                                              );
+
+                     --'L_REC_CNT....'||L_REC_CNT);
+                     UPDATE addb.addb_xxa_ar_trans_erp_rcpt d
+                        SET d.process_flag = 'E',
+                            d.process_message = l_error_mesg,
+                            d.process_date = SYSDATE
+                      WHERE d.composite_receipt_id = i.composite_receipt_id
+                        AND d.receipt_number = i.receipt_number
+                        AND d.doctype = 'RCR'
+                        AND d.serial_number = i.serial_number;
+
+                     COMMIT;
+                     aucustom.xxses_debug_prc
+                                    ('Error massage and message data to - X ',
+                                     l_error_mesg || ',' || l_msg_data
+                                    );
+                  END;
+               ELSE
+                  BEGIN
+                     UPDATE addb.addb_xxa_ar_trans_erp_rcpt d
+                        SET d.process_flag = 'S',
+                            d.process_message =
+                                         'SUCCESS' || '-' || l_cash_receipt_id,
+                            d.process_date = SYSDATE,
+                            process_message12 = 'Through Update API'      ---,
+                      --d.receipt_date = SYSDATE
+                     WHERE  d.composite_receipt_id = i.composite_receipt_id
+                        AND d.receipt_number = i.receipt_number
+                        AND d.doctype = 'RCR'
+                        AND d.serial_number = i.serial_number;
+
+                     aucustom.xxses_debug_prc
+                                           ('update table processflag to - Y',
+                                            'S'
+                                           );   --'L_REC_CNT....'||L_REC_CNT);
+                     COMMIT;
+                  END;
+               END IF;
+            END LOOP;
+         END;
+      END LOOP;
+
+      BEGIN
+         UPDATE addb.addb_xxa_ar_trans_erp_rcpt tt
+            SET process_message =
+                    'Dublicate because cheque number have two or more receipt',
+                process_flag = 'N',
+                chno = chno || '-D_' || SUBSTR (composite_receipt_id, -2, 2),
+                process_date = SYSDATE
+          WHERE tt.process_message =
+                   'A cash receipt with this number, date, amount and customer already exists.'
+            AND NOT EXISTS (
+                   SELECT 'Y'
+                     FROM ar_cash_receipts_all@hrtoebs
+                    WHERE attribute1 = TO_CHAR (tt.composite_receipt_id)
+                      AND receipt_date = tt.receipt_date
+                      AND status NOT IN ('REV'));
+
+         aucustom.xxses_debug_prc
+            ('Duplicate record because of cheq number to - Z ',
+             'A cash receipt with this number, date, amount and customer already exists.'
+            );
+         COMMIT;
+      EXCEPTION
+         WHEN OTHERS
+         THEN
+            NULL;
+      END;
+
+      BEGIN
+         UPDATE addb.addb_xxa_ar_trans_erp_rcpt tt
+            SET process_message =
+                      'SUCCESS'
+                   || '-'
+                   || (SELECT cash_receipt_id
+                         FROM ar_cash_receipts_all@hrtoebs
+                        WHERE attribute1 = TO_CHAR (tt.composite_receipt_id)
+                          AND receipt_date = tt.receipt_date
+                          AND status NOT IN ('REV')),
+                process_flag = 'S',
+                process_date = SYSDATE                                     --,
+          -- receipt_date = SYSDATE
+         WHERE  tt.process_message =
+                   'A cash receipt with this number, date, amount and customer already exists.'
+            AND EXISTS (
+                   SELECT 'Y'
+                     FROM ar_cash_receipts_all@hrtoebs
+                    WHERE attribute1 = TO_CHAR (tt.composite_receipt_id)
+                      AND receipt_date = tt.receipt_date
+                      AND status NOT IN ('REV'));
+
+         aucustom.xxses_debug_prc
+            ('Duplicate record because of cheq number to - A1 ',
+             'A cash receipt with this number, date, amount and customer already exists.'
+            );
+         COMMIT;
+      EXCEPTION
+         WHEN OTHERS
+         THEN
+            NULL;
+      END;
+
+      BEGIN
+         UPDATE addb.addb_xxa_ar_trans_erp_rcpt tt
+            SET process_message =
+                      'SUCCESS REVERS'
+                   || '-'
+                   || (SELECT cash_receipt_id
+                         FROM ar_cash_receipts_all@hrtoebs
+                        WHERE attribute1 = TO_CHAR (tt.composite_receipt_id)
+                          AND status IN ('REV')),
+                process_flag = 'S',
+                process_date = SYSDATE                                   ----,
+          --- receipt_date = SYSDATE
+         WHERE  (   tt.process_message LIKE 'Invalid cash receipt identifier%'
+                 OR tt.process_message IS NULL
+                )
+            AND EXISTS (
+                   SELECT 'Y'
+                     FROM ar_cash_receipts_all@hrtoebs
+                    WHERE attribute1 = TO_CHAR (tt.composite_receipt_id)
+                      AND status IN ('REV'));
+
+         aucustom.xxses_debug_prc
+                          ('Duplicate record because of cheq number to - A2 ',
+                           'Invalid cash receipt identifier%'
+                          );
+         COMMIT;
+      EXCEPTION
+         WHEN OTHERS
+         THEN
+            NULL;
+      END;
+   END xxa_ar_dcr_receipt_p3;

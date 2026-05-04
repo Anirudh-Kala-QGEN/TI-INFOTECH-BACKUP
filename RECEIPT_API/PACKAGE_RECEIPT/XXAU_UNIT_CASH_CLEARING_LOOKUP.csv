@@ -1,0 +1,24 @@
+LOOKUP_TYPE,LOOKUP_CODE,MEANING,DESCRIPTION,ENABLED_FLAG,START_DATE_ACTIVE
+XXAU_UNIT_CASH_CLEARING,AGR,Agra-Cash Clearing,Agra-Cash Clearing,Y,3/16/2026
+XXAU_UNIT_CASH_CLEARING,ALD,Allahabad-Cash Clearing,Allahabad-Cash Clearing,Y,3/16/2026
+XXAU_UNIT_CASH_CLEARING,ALI,Aligarh-Cash Clearing,Aligarh-Cash Clearing,Y,3/16/2026
+XXAU_UNIT_CASH_CLEARING,BRL,Bareilly-Cash Clearing,Bareilly-Cash Clearing,Y,3/16/2026
+XXAU_UNIT_CASH_CLEARING,COP,Corporate - Cash Clearing,Corporate - Cash Clearing,Y,3/17/2026
+XXAU_UNIT_CASH_CLEARING,DRN,Dehradun-Cash Clearing,Dehradun-Cash Clearing,Y,3/16/2026
+XXAU_UNIT_CASH_CLEARING,DSL,Dharamshala-Cash Clearing,Dharamshala-Cash Clearing,Y,3/16/2026
+XXAU_UNIT_CASH_CLEARING,GKP,Gorakhpur-Cash Clearing,Gorakhpur-Cash Clearing,Y,3/16/2026
+XXAU_UNIT_CASH_CLEARING,HLD,Haldwani-Cash Clearing,Haldwani-Cash Clearing,Y,3/16/2026
+XXAU_UNIT_CASH_CLEARING,HSR,Hissar-Cash Clearing,Hissar-Cash Clearing,Y,3/16/2026
+XXAU_UNIT_CASH_CLEARING,JAL,Jalandhar-Cash Clearing,Jalandhar-Cash Clearing,Y,3/17/2026
+XXAU_UNIT_CASH_CLEARING,JHS,Jhansi-Cash Clearing,Jhansi-Cash Clearing,Y,3/13/2026
+XXAU_UNIT_CASH_CLEARING,JMU,Jammu-Cash Clearing,Jammu-Cash Clearing,Y,3/16/2026
+XXAU_UNIT_CASH_CLEARING,KNL,Karnal-Cash Clearing,Karnal-Cash Clearing,Y,3/17/2026
+XXAU_UNIT_CASH_CLEARING,KNP,Kanpur-Cash Clearing,Kanpur-Cash Clearing,Y,3/16/2026
+XXAU_UNIT_CASH_CLEARING,LKN,Lucknow-Cash Clearing,Lucknow-Cash Clearing,Y,3/16/2026
+XXAU_UNIT_CASH_CLEARING,MBD,Moradabad-Cash Clearing,Moradabad-Cash Clearing,Y,3/16/2026
+XXAU_UNIT_CASH_CLEARING,MRT,Meerut-Cash Clearing,Meerut-Cash Clearing,Y,3/13/2026
+XXAU_UNIT_CASH_CLEARING,NDA,Noida-Cash Clearing,Noida-Cash Clearing,Y,3/16/2026
+XXAU_UNIT_CASH_CLEARING,PKL,Panchkula-Cash Clearing,Panchkula-Cash Clearing,Y,3/16/2026
+XXAU_UNIT_CASH_CLEARING,RTK,Rohtak-Cash Clearing,Rohtak-Cash Clearing,Y,3/16/2026
+XXAU_UNIT_CASH_CLEARING,SML,Shimla-Cash Clearing,Shimla-Cash Clearing,Y,3/17/2026
+XXAU_UNIT_CASH_CLEARING,VNS,Varanasi-Cash Clearing,Varanasi-Cash Clearing,Y,3/16/2026
